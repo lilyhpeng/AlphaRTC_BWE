@@ -3,7 +3,6 @@ import tensorflow as tf
 import tflearn
 import network
 
-#add by wb
 GAMMA = 0.99
 A_DIM = 6
 #ENTROPY_WEIGHT = 0.5
