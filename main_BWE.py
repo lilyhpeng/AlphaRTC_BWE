@@ -38,16 +38,27 @@ def agent(net_params_queue, exp_queues, config):
     network_params = net_params_queue.get()
     net.load_state_dict(network_params)
 
-    bwe = 1000
+    bwe = config['default_bwe']
 
     s_batch = [np.zeros(config['state_dim'],config['state_length'])]
     a_batch = [np.zeros(config['action_dim'])]
     r_batch = []
     entropy_record = []
 
+    time_step = 0
+
     # experience RTC
     while True:
         #todo: Agent interact with gym
+        done = False
+        while not done:
+            state, reward, done, _ = env.step(bwe)
+            state = torch.Tensor(state)
+            r_batch.append(reward)
+
+        time_step += 1
+
+
 
 
         pass
