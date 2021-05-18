@@ -3,6 +3,7 @@ import tflearn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import init
 
 S_DIM = 3
 A_DIM = 1
@@ -29,6 +30,15 @@ class Network(nn.Module):
         # self.a2 = nn.LeakyReLU()
         self.actor_output = nn.Linear(self.layer2_shape, self.a_dim)
         self.critic_output = nn.Linear(self.layer2_shape, 1)
+
+    def init_net_params(self):
+        for m in self.modules():
+            if isinstance(m,nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Conv2d):
+                init.xavier_uniform_(m.weight.data)
+                init.constant_(m.bias.data, 0.1)
 
     def forward(self, state):
         x = F.leaky_relu(self.h1(state))

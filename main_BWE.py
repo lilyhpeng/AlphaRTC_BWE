@@ -11,6 +11,8 @@ CONFIG_FILE = ''
 TRAIN_TRACES = ''
 TEST_TRACES = ''
 
+# todo: log files needs to be created
+
 def central_agent(net_params_queue, exp_queues, config):
 
     assert len(net_params_queue) == config['num_agents']
@@ -19,19 +21,24 @@ def central_agent(net_params_queue, exp_queues, config):
     net = Network(config)
 
     if config['load_model']:
-        saved_params = torch.load(config['saved_model_path'])
-        net.load_state_dict(saved_params)
+        net_params = torch.load(config['saved_model_path'])
+        net.load_state_dict(net_params)
+    else:
+        net.init_net_params()
+        net_params = net.state_dict()
 
     epoch = 0
 
     while True:
         #todo: Central_agent update
-
+        for i in range(config['num_agents']):
+            net_params_queue[i].put(net_params)
         pass
 
 def agent(net_params_queue, exp_queues, config):
-
+    # todo: gym_id has not considered
     env = GymEnv()
+    env.reset()
 
     net = Network(config)
 
@@ -40,28 +47,59 @@ def agent(net_params_queue, exp_queues, config):
 
     bwe = config['default_bwe']
 
-    s_batch = [np.zeros(config['state_dim'],config['state_length'])]
-    a_batch = [np.zeros(config['action_dim'])]
+    state = np.zeros(config['state_dim'], config['state_length'])
+    s_batch = [np.zeros(config['state_dim'], config['state_length'])]
+    a_batch = []
     r_batch = []
-    entropy_record = []
 
-    time_step = 0
+    # time_step = 0
+    # reward = 0
+    # done = False
 
-    # experience RTC
+    # experience RTC if not forced to stop
     while True:
-        #todo: Agent interact with gym
-        done = False
-        while not done:
-            state, reward, done, _ = env.step(bwe)
-            state = torch.Tensor(state)
-            r_batch.append(reward)
+        # todo: Agent interact with gym
+        # while not done:
+        np.roll(state, -1, axis=1)
 
-        time_step += 1
+        receiving_rate, delay, loss_ratio, done = env.step(bwe)
 
+        # todo: Regularization
+        state[0, -1] = receiving_rate
+        state[1, -1] = delay
+        state[2, -1] = loss_ratio
 
+        reward = receiving_rate - delay - loss_ratio   # todo: redesign linear reward function
 
+        # s_batch.append(state)
+        # a_batch.append(bwe)
+        r_batch.append(reward)
 
-        pass
+        bwe, value = net.forward(state)
+
+        if len(r_batch) >= config['train_seq_length'] or done:
+            exp_queues.put([s_batch[1:],
+                            a_batch[1:],
+                            r_batch[1:],
+                            done])      # ignore the first bwe and state since we don't have the ability to control it
+
+            # synchronize the network parameters from the coordinator
+            network_params = net_params_queue.get()
+            net.load_state_dict(network_params)
+
+            del s_batch[:]
+            del a_batch[:]
+            del r_batch[:]
+
+        # todo: need to be fixed
+        if done:
+            bwe = config['default_bwe']
+            s_batch.append(np.zeros(config['state_dim'], config['state_length']))
+            a_batch.append(bwe)
+            env.reset() # todo: does it necessary?
+        else:
+            s_batch.append(state)
+            a_batch.append(bwe)
 
     pass
 

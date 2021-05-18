@@ -1,0 +1,610 @@
+{
+    "uplink": {
+        "trace_pattern": [
+            {
+                "capacity": 251.2,
+                "duration": 1790.0
+            },
+            {
+                "capacity": 914.5,
+                "duration": 2330.0
+            },
+            {
+                "capacity": 733.8,
+                "duration": 2330.0
+            },
+            {
+                "capacity": 588.9,
+                "duration": 7090.0
+            },
+            {
+                "capacity": 264.5,
+                "duration": 3720.0
+            },
+            {
+                "capacity": 311.6,
+                "duration": 3680.0
+            },
+            {
+                "capacity": 337.1,
+                "duration": 3690.0
+            },
+            {
+                "capacity": 431.9,
+                "duration": 4700.0
+            },
+            {
+                "capacity": 337.2,
+                "duration": 3990.0
+            },
+            {
+                "capacity": 390.6,
+                "duration": 4730.0
+            },
+            {
+                "capacity": 266.2,
+                "duration": 7270.0
+            },
+            {
+                "capacity": 218.9,
+                "duration": 3470.0
+            },
+            {
+                "capacity": 444.3,
+                "duration": 2780.0
+            },
+            {
+                "capacity": 569.5,
+                "duration": 1500.0
+            },
+            {
+                "capacity": 887.2,
+                "duration": 3180.0
+            },
+            {
+                "capacity": 481.3,
+                "duration": 3250.0
+            },
+            {
+                "capacity": 417.7,
+                "duration": 1640.0
+            },
+            {
+                "capacity": 938.9,
+                "duration": 940.0
+            },
+            {
+                "capacity": 1234.5,
+                "duration": 1460.0
+            },
+            {
+                "capacity": 1167.0,
+                "duration": 1300.0
+            },
+            {
+                "capacity": 771.1,
+                "duration": 1390.0
+            },
+            {
+                "capacity": 912.4,
+                "duration": 1450.0
+            },
+            {
+                "capacity": 1080.0,
+                "duration": 1840.0
+            },
+            {
+                "capacity": 924.4,
+                "duration": 1860.0
+            },
+            {
+                "capacity": 805.3,
+                "duration": 1480.0
+            },
+            {
+                "capacity": 1028.7,
+                "duration": 1090.0
+            },
+            {
+                "capacity": 879.4,
+                "duration": 1180.0
+            },
+            {
+                "capacity": 1495.6,
+                "duration": 1620.0
+            },
+            {
+                "capacity": 1036.0,
+                "duration": 2700.0
+            },
+            {
+                "capacity": 498.0,
+                "duration": 4690.0
+            },
+            {
+                "capacity": 265.0,
+                "duration": 3900.0
+            },
+            {
+                "capacity": 385.6,
+                "duration": 4000.0
+            },
+            {
+                "capacity": 357.1,
+                "duration": 4810.0
+            },
+            {
+                "capacity": 360.1,
+                "duration": 2960.0
+            },
+            {
+                "capacity": 479.3,
+                "duration": 1790.0
+            },
+            {
+                "capacity": 805.0,
+                "duration": 2250.0
+            },
+            {
+                "capacity": 665.1,
+                "duration": 2370.0
+            },
+            {
+                "capacity": 615.9,
+                "duration": 1700.0
+            },
+            {
+                "capacity": 921.9,
+                "duration": 1650.0
+            },
+            {
+                "capacity": 802.5,
+                "duration": 3190.0
+            },
+            {
+                "capacity": 532.3,
+                "duration": 1180.0
+            },
+            {
+                "capacity": 1301.5,
+                "duration": 1250.0
+            },
+            {
+                "capacity": 1236.5,
+                "duration": 1350.0
+            },
+            {
+                "capacity": 1108.2,
+                "duration": 1110.0
+            },
+            {
+                "capacity": 1363.5,
+                "duration": 1140.0
+            },
+            {
+                "capacity": 1443.6,
+                "duration": 1300.0
+            },
+            {
+                "capacity": 1148.7,
+                "duration": 1230.0
+            },
+            {
+                "capacity": 1149.2,
+                "duration": 1100.0
+            },
+            {
+                "capacity": 1440.6,
+                "duration": 1360.0
+            },
+            {
+                "capacity": 1178.2,
+                "duration": 1240.0
+            },
+            {
+                "capacity": 1148.8,
+                "duration": 1820.0
+            },
+            {
+                "capacity": 797.3,
+                "duration": 4350.0
+            },
+            {
+                "capacity": 325.4,
+                "duration": 1550.0
+            },
+            {
+                "capacity": 904.6,
+                "duration": 1230.0
+            },
+            {
+                "capacity": 1428.5,
+                "duration": 1180.0
+            },
+            {
+                "capacity": 1300.4,
+                "duration": 860.0
+            },
+            {
+                "capacity": 1418.9,
+                "duration": 420.0
+            },
+            {
+                "capacity": 1394.9,
+                "duration": 1450.0
+            },
+            {
+                "capacity": 1380.8,
+                "duration": 860.0
+            },
+            {
+                "capacity": 1815.7,
+                "duration": 1030.0
+            },
+            {
+                "capacity": 1572.8,
+                "duration": 400.0
+            },
+            {
+                "capacity": 1608.7,
+                "duration": 310.0
+            },
+            {
+                "capacity": 1713.6,
+                "duration": 470.0
+            },
+            {
+                "capacity": 1731.1,
+                "duration": 2670.0
+            },
+            {
+                "capacity": 1259.5,
+                "duration": 1820.0
+            },
+            {
+                "capacity": 1015.1,
+                "duration": 1100.0
+            },
+            {
+                "capacity": 1071.5,
+                "duration": 1200.0
+            },
+            {
+                "capacity": 1471.0,
+                "duration": 1070.0
+            },
+            {
+                "capacity": 1359.2,
+                "duration": 1690.0
+            },
+            {
+                "capacity": 1152.5,
+                "duration": 1120.0
+            },
+            {
+                "capacity": 1070.4,
+                "duration": 1050.0
+            },
+            {
+                "capacity": 1253.0,
+                "duration": 1130.0
+            },
+            {
+                "capacity": 1495.7,
+                "duration": 1490.0
+            },
+            {
+                "capacity": 1105.7,
+                "duration": 1200.0
+            },
+            {
+                "capacity": 1376.9,
+                "duration": 900.0
+            },
+            {
+                "capacity": 1513.1,
+                "duration": 1190.0
+            },
+            {
+                "capacity": 1421.2,
+                "duration": 1140.0
+            },
+            {
+                "capacity": 1365.5,
+                "duration": 1100.0
+            },
+            {
+                "capacity": 1512.3,
+                "duration": 1200.0
+            },
+            {
+                "capacity": 1129.5,
+                "duration": 1510.0
+            },
+            {
+                "capacity": 1050.4,
+                "duration": 3640.0
+            },
+            {
+                "capacity": 372.6,
+                "duration": 3500.0
+            },
+            {
+                "capacity": 421.6,
+                "duration": 1650.0
+            },
+            {
+                "capacity": 679.0,
+                "duration": 2830.0
+            },
+            {
+                "capacity": 580.7,
+                "duration": 1380.0
+            },
+            {
+                "capacity": 719.4,
+                "duration": 1550.0
+            },
+            {
+                "capacity": 817.4,
+                "duration": 3640.0
+            },
+            {
+                "capacity": 411.0,
+                "duration": 2350.0
+            },
+            {
+                "capacity": 713.0,
+                "duration": 1990.0
+            },
+            {
+                "capacity": 750.4,
+                "duration": 1880.0
+            },
+            {
+                "capacity": 792.0,
+                "duration": 970.0
+            },
+            {
+                "capacity": 996.5,
+                "duration": 1530.0
+            },
+            {
+                "capacity": 1138.4,
+                "duration": 1210.0
+            },
+            {
+                "capacity": 1399.8,
+                "duration": 1320.0
+            },
+            {
+                "capacity": 1064.4,
+                "duration": 1250.0
+            },
+            {
+                "capacity": 1045.0,
+                "duration": 1540.0
+            },
+            {
+                "capacity": 1009.1,
+                "duration": 1560.0
+            },
+            {
+                "capacity": 944.9,
+                "duration": 1570.0
+            },
+            {
+                "capacity": 1149.0,
+                "duration": 2290.0
+            },
+            {
+                "capacity": 627.0,
+                "duration": 2220.0
+            },
+            {
+                "capacity": 644.8,
+                "duration": 2080.0
+            },
+            {
+                "capacity": 726.6,
+                "duration": 2440.0
+            },
+            {
+                "capacity": 600.6,
+                "duration": 3230.0
+            },
+            {
+                "capacity": 470.3,
+                "duration": 1920.0
+            },
+            {
+                "capacity": 678.6,
+                "duration": 2340.0
+            },
+            {
+                "capacity": 738.5,
+                "duration": 2340.0
+            },
+            {
+                "capacity": 627.3,
+                "duration": 1890.0
+            },
+            {
+                "capacity": 793.7,
+                "duration": 1920.0
+            },
+            {
+                "capacity": 809.6,
+                "duration": 1990.0
+            },
+            {
+                "capacity": 731.5,
+                "duration": 1820.0
+            },
+            {
+                "capacity": 878.2,
+                "duration": 2270.0
+            },
+            {
+                "capacity": 639.2,
+                "duration": 2300.0
+            },
+            {
+                "capacity": 592.0,
+                "duration": 1720.0
+            },
+            {
+                "capacity": 891.6,
+                "duration": 1790.0
+            },
+            {
+                "capacity": 876.5,
+                "duration": 1380.0
+            },
+            {
+                "capacity": 1024.4,
+                "duration": 1730.0
+            },
+            {
+                "capacity": 844.8,
+                "duration": 1550.0
+            },
+            {
+                "capacity": 950.0,
+                "duration": 1330.0
+            },
+            {
+                "capacity": 1051.7,
+                "duration": 1700.0
+            },
+            {
+                "capacity": 1008.3,
+                "duration": 1820.0
+            },
+            {
+                "capacity": 821.6,
+                "duration": 1260.0
+            },
+            {
+                "capacity": 936.6,
+                "duration": 530.0
+            },
+            {
+                "capacity": 1041.4,
+                "duration": 1930.0
+            },
+            {
+                "capacity": 1017.2,
+                "duration": 1540.0
+            },
+            {
+                "capacity": 955.6,
+                "duration": 3280.0
+            },
+            {
+                "capacity": 465.1,
+                "duration": 760.0
+            },
+            {
+                "capacity": 738.4,
+                "duration": 550.0
+            },
+            {
+                "capacity": 760.8,
+                "duration": 890.0
+            },
+            {
+                "capacity": 837.8,
+                "duration": 3720.0
+            },
+            {
+                "capacity": 857.0,
+                "duration": 3590.0
+            },
+            {
+                "capacity": 503.8,
+                "duration": 1980.0
+            },
+            {
+                "capacity": 572.6,
+                "duration": 3340.0
+            },
+            {
+                "capacity": 505.8,
+                "duration": 3270.0
+            },
+            {
+                "capacity": 418.6,
+                "duration": 4040.0
+            },
+            {
+                "capacity": 468.7,
+                "duration": 1860.0
+            },
+            {
+                "capacity": 620.9,
+                "duration": 1890.0
+            },
+            {
+                "capacity": 672.0,
+                "duration": 2210.0
+            },
+            {
+                "capacity": 736.1,
+                "duration": 1810.0
+            },
+            {
+                "capacity": 900.9,
+                "duration": 2050.0
+            },
+            {
+                "capacity": 772.0,
+                "duration": 1560.0
+            },
+            {
+                "capacity": 841.1,
+                "duration": 1920.0
+            },
+            {
+                "capacity": 859.7,
+                "duration": 1910.0
+            },
+            {
+                "capacity": 782.2,
+                "duration": 2060.0
+            },
+            {
+                "capacity": 774.1,
+                "duration": 1750.0
+            },
+            {
+                "capacity": 749.4,
+                "duration": 1630.0
+            },
+            {
+                "capacity": 966.4,
+                "duration": 1360.0
+            },
+            {
+                "capacity": 1042.7,
+                "duration": 1560.0
+            },
+            {
+                "capacity": 974.6,
+                "duration": 1430.0
+            },
+            {
+                "capacity": 785.9,
+                "duration": 1890.0
+            },
+            {
+                "capacity": 884.0,
+                "duration": 1170.0
+            },
+            {
+                "capacity": 869.3,
+                "duration": 1240.0
+            }
+        ]
+    }
+}

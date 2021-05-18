@@ -89,6 +89,7 @@ class GymEnv:
         states.append(liner_to_log(latest_prediction))
 
         # calculate reward
-        reward = states[0] - states[1] - states[2]
+        # reward = states[0] - states[1] - states[2]
 
-        return states, reward, done, {}
+        # return states, reward, done, {}
+        return receiving_rate, delay, loss_ratio, done

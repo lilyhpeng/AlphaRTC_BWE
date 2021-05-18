@@ -7,6 +7,7 @@ def load_config():
         'num_agents': 16,
         'save_interval': 100,
         'default_bwe': 1000,
+        'train_seq_length': 1000,
         'state_dim': 3,
         'state_length': 10,
         'action_dim': 1,
