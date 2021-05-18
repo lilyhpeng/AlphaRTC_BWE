@@ -40,31 +40,37 @@ def log_to_linear(value):
 
 
 class GymEnv:
-    def __init__(self, step_time=60):
-        self.gym_env = None     
+    def __init__(self, env_id, config, step_time=60):
+        self.env_id = env_id
         self.step_time = step_time
-        trace_dir = os.path.join(os.path.dirname(__file__), "traces")
+        self.gym_env = alphartc_gym.Gym(self.env_id)
+        self.packet_record = PacketRecord()
+
+        # initialize state information:
+        self.receiving_rate = np.zeros(HISTORY_LENGTH)
+        self.delay = np.zeros(HISTORY_LENGTH)
+        self.loss_ratio = np.zeros(HISTORY_LENGTH)
+        self.prediction_history = np.zeros(HISTORY_LENGTH)
+
+        # trace_dir = os.path.join(os.path.dirname(__file__), "traces")
+        trace_dir = config['trace_dir']
         self.trace_set = glob.glob('{trace_dir}/**/*.json', recursive=True)
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float64)
         self.observation_space = spaces.Box(
-            low=np.zeros((STATE_DIMENSION,HISTORY_LENGTH)),
-            high=np.ones((STATE_DIMENSION,HISTORY_LENGTH)),
+            low=np.zeros((STATE_DIMENSION, HISTORY_LENGTH)),
+            high=np.ones((STATE_DIMENSION, HISTORY_LENGTH)),
             dtype=np.float64)
 
-
-    def reset(self):#reset history of state and return np.array
-        self.gym_env = alphartc_gym.Gym()
-        self.gym_env.reset(trace_path=random.choice(self.trace_set),
-            report_interval_ms=self.step_time,
-            duration_time_ms=0)
-        self.packet_record = PacketRecord()
+    def reset(self):
+        self.gym_env.reset(trace_path=random.choice(self.trace_set), report_interval_ms=self.step_time,
+                           duration_time_ms=0)
         self.packet_record.reset()
-        self.receiving_rate=np.zeros(HISTORY_LENGTH)
-        self.delay=np.zeros(HISTORY_LENGTH)
-        self.loss_ratio=np.zeros(HISTORY_LENGTH)
-        self.prediction_history=np.zeros(HISTORY_LENGTH)
+        self.receiving_rate = np.zeros(HISTORY_LENGTH)
+        self.delay = np.zeros(HISTORY_LENGTH)
+        self.loss_ratio = np.zeros(HISTORY_LENGTH)
+        self.prediction_history = np.zeros(HISTORY_LENGTH)
 
-        states=np.vstack((self.receiving_rate,self.delay,self.loss_ratio,self.prediction_history))
+        states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
 
         return states
 
@@ -77,7 +83,7 @@ class GymEnv:
         # action: log to linear
         bandwidth_prediction = log_to_linear(action)
 
-        # run the action
+        # run the action, get related packet list:
         packet_list, done = self.gym_env.step(bandwidth_prediction)
         for pkt in packet_list:
             packet_info = PacketInfo()
@@ -92,27 +98,26 @@ class GymEnv:
             packet_info.bandwidth_prediction = bandwidth_prediction
             self.packet_record.on_receive(packet_info)
 
-        # calculate state
-
+        # calculate state:
         receiving_rate = self.packet_record.calculate_receiving_rate(interval=self.step_time)
-        #states.append(liner_to_log(receiving_rate))
+        # states.append(liner_to_log(receiving_rate))
         self.receiving_rate.append(receiving_rate)
         np.delete(self.receiving_rate, 0, axis=0)
         delay = self.packet_record.calculate_average_delay(interval=self.step_time)
-        #states.append(min(delay/1000, 1))
-        self.delay.append(delay )
+        # states.append(min(delay/1000, 1))
+        self.delay.append(delay)
         np.delete(self.delay, 0, axis=0)
         loss_ratio = self.packet_record.calculate_loss_ratio(interval=self.step_time)
-        #states.append(loss_ratio)
+        # states.append(loss_ratio)
         self.loss_ratio.append(loss_ratio)
         np.delete(self.loss_ratio, 0, axis=0)
         latest_prediction = self.packet_record.calculate_latest_prediction()
-        #states.append(liner_to_log(latest_prediction))
+        # states.append(liner_to_log(latest_prediction))
         self.prediction_history.append(latest_prediction)
         np.delete(self.prediction_history, 0, axis=0)
         states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
-        # calculate reward
 
+        # calculate reward:
         reward = self.get_reward()
 
         return states, reward, done, {}

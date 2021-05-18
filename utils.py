@@ -22,7 +22,11 @@ def load_config():
         'load_model': False,
         'saved_model_path': '',
         'layer1_shape': 256,
-        'layer2_shape': 256
+        'layer2_shape': 256,
+
+        'trace_dir': './traces',
+        'log_dir': './logs',
+        'model_dir': './models'
     }
 
     return config

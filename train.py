@@ -37,9 +37,9 @@ def central_agent(net_params_queue, exp_queues, config):
         pass
 
 
-def agent(net_params_queue, exp_queues, config):
+def agent(net_params_queue, exp_queues, config, id):
     # todo: gym_id has not considered
-    env = GymEnv()
+    env = GymEnv(env_id=id, config=config)
     env.reset()
 
     net = Network(config)
@@ -124,7 +124,7 @@ def main():
     agents = []
     for i in range(num_agents):
         agents.append(mp.Process(target=agent,
-                                 args=(net_params_queue, exp_queues, config)))
+                                 args=(net_params_queue, exp_queues, config, i)))
 
     for i in range(num_agents):
         agents[i].start()
