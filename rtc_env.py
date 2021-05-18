@@ -44,7 +44,7 @@ class GymEnv:
         self.gym_env = None     
         self.step_time = step_time
         trace_dir = os.path.join(os.path.dirname(__file__), "traces")
-        self.trace_set = glob.glob(f'{trace_dir}/**/*.json', recursive=True)
+        self.trace_set = glob.glob('{trace_dir}/**/*.json', recursive=True)
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float64)
         self.observation_space = spaces.Box(
             low=np.zeros((STATE_DIMENSION,HISTORY_LENGTH)),
