@@ -1,6 +1,14 @@
-# AlphaRTC Gym example
+# AlphaRTC_BWE
 
-This repository is an example for [AlphaRTC Gym](https://github.com/OpenNetLab/gym). By converting the raw stats of packet traces to some features and leveraging the PPO algorithms, this example trained a simple bandwidth estimator.
+This repository is an example for [AlphaRTC Gym](https://github.com/OpenNetLab/gym). 
+By converting the raw stats of packet traces to some features and leveraging the PPO algorithms, this example trained a simple bandwidth estimator.
+
+## File Structure
+
+* models/: used to save trained models;
+* traces/: network traces used for training and testing;
+* logs/: used to save log information during training and testing;
+* main.py: entry for original gym;
 
 ## Try this example
 

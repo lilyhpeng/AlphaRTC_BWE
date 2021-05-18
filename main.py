@@ -28,7 +28,7 @@ def main():
     betas = (0.9, 0.999)
     state_dim = 4
     action_dim = 1
-    data_path = f'./data/' # Save model and reward curve here
+    data_path = './data/' # Save model and reward curve here
     #############################################
 
     if not os.path.exists(data_path):
