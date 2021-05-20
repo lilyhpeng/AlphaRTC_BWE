@@ -1,5 +1,4 @@
 import collections
-import numpy as np
 
 # 过程中需要用到的一些常量
 kMinNumDeltas = 60
@@ -40,8 +39,14 @@ class Estimator(object):
         self.last_update_ms = -1  # 上一次更新阈值的时间
         self.now_ms = -1  # 当前系统时间
 
-        with open("debug.log", 'r+') as f:
-            f.truncate()
+        with open("debug.log", 'w') as f:
+            f.write("========================== debug.log =========================\n")
+        with open("bandwidth_estimated.txt", 'w') as f:
+            f.write("========================== bandwidth_estimated.txt =========================\n")
+        with open("bandwidth_estimated_by_loss.txt",'w') as f:
+            f.write("========================== bandwidth_estimated_by_loss.txt =========================\n")
+        with open("bandwidth_estimated_by_delay.txt",'w') as f:
+            f.write("========================== bandwidth_estimated_by_delay.txt =========================\n")
 
     def report_states(self, stats: dict):
         '''
@@ -76,7 +81,15 @@ class Estimator(object):
         :return: 估计带宽 bandwidth_estimation
         '''
         BWE_by_delay, flag = self.get_estimated_bandwidth_by_delay()
+        with open("bandwidth_estimated_by_delay.txt",'a+') as f:
+            bwe_delay = BWE_by_delay / 1000
+            f.write(str(int(bwe_delay)) + '\n')
+
         BWE_by_loss = self.get_estimated_bandwidth_by_loss()
+        with open("bandwidth_estimated_by_loss.txt",'a+') as f:
+            bwe_loss = BWE_by_loss / 1000
+            f.write(str(int(bwe_loss)) + '\n')
+
         bandwidth_estimation = min(BWE_by_delay, BWE_by_loss)
         if flag == True:
             self.packets_list = []  # 清空packets_list
@@ -85,6 +98,10 @@ class Estimator(object):
             bwe = bandwidth_estimation / 1000
             f.write("Current BWE = " + str(int(bwe)) + " kbps" + '\n')
             f.write("=============================================================\n")
+        with open("bandwidth_estimated.txt", 'a+') as f:
+            bwe = bandwidth_estimation / 1000
+            f.write(str(int(bwe)) + '\n')
+
         self.last_bandwidth_estimation = bandwidth_estimation
         return bandwidth_estimation
 
@@ -147,11 +164,11 @@ class Estimator(object):
         计算该时段内的丢包率
         :return: 丢包率 loss_rate
         '''
-        flag = False                                   # 标志是否获得第一个有效包
+        flag = False  # 标志是否获得第一个有效包
         valid_packets_num = 0
         min_sequence_number, max_sequence_number = 0, 0
-        if len(self.packets_list) == 0:                # 该时间间隔内无包到达
-            return -1   
+        if len(self.packets_list) == 0:  # 该时间间隔内无包到达
+            return -1
         for i in range(len(self.packets_list)):
             if self.packets_list[i].payload_type == 126:
                 if not flag:
@@ -161,6 +178,8 @@ class Estimator(object):
                 valid_packets_num += 1
                 min_sequence_number = min(min_sequence_number, self.packets_list[i].sequence_number)
                 max_sequence_number = max(max_sequence_number, self.packets_list[i].sequence_number)
+        if (max_sequence_number - min_sequence_number) == 0:
+            return -1
         receive_rate = valid_packets_num / (max_sequence_number - min_sequence_number)
         loss_rate = 1 - receive_rate
         return loss_rate
