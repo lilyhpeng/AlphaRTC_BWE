@@ -50,10 +50,10 @@ class GymEnv:
         self.config = config
 
         # initialize state information:
-        self.receiving_rate = np.zeros(HISTORY_LENGTH)
-        self.delay = np.zeros(HISTORY_LENGTH)
-        self.loss_ratio = np.zeros(HISTORY_LENGTH)
-        self.prediction_history = np.zeros(HISTORY_LENGTH)
+        # self.receiving_rate = np.zeros(HISTORY_LENGTH)
+        # self.delay = np.zeros(HISTORY_LENGTH)
+        # self.loss_ratio = np.zeros(HISTORY_LENGTH)
+        # self.prediction_history = np.zeros(HISTORY_LENGTH)
 
         # trace_dir = os.path.join(os.path.dirname(__file__), "traces")
         trace_dir = self.config['trace_dir']
@@ -131,6 +131,7 @@ class GymEnv:
         # self.prediction_history.append(latest_prediction)
         # np.delete(self.prediction_history, 0, axis=0)
         # states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
+        # todo: regularization needs to be fixed
         self.state[0, 0, -1] = self.receiving_rate / np.max(self.receiving_rate_list)
         self.state[0, 1, -1] = self.delay / np.max(self.delay_list)
         self.state[0, 2, -1] = self.loss_ratio / np.max(self.loss_ratio_list)

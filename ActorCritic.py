@@ -46,7 +46,7 @@ class ActorCritic():
         log_probs = m_probs.log_prob(a_batch)
         actor_loss = torch.sum(log_probs * (-td_batch))
         entropy_loss = -self.config['entropy_weight'] * torch.sum(m_probs.entropy())
-        actor_loss = actor_loss + entropy_loss
+        actor_loss += entropy_loss
         actor_loss.backward()
 
         value = self.CriticNetwork.forward(s_batch).squeeze()
