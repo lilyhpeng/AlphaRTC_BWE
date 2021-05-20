@@ -9,6 +9,7 @@ import glob
 from Queue import Queue
 import gym
 from gym import spaces
+import torch
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gym"))
 import alphartc_gym
@@ -46,6 +47,8 @@ class GymEnv:
         self.gym_env = alphartc_gym.Gym(self.env_id)
         self.packet_record = PacketRecord()
 
+        self.config = config
+
         # initialize state information:
         self.receiving_rate = np.zeros(HISTORY_LENGTH)
         self.delay = np.zeros(HISTORY_LENGTH)
@@ -53,7 +56,7 @@ class GymEnv:
         self.prediction_history = np.zeros(HISTORY_LENGTH)
 
         # trace_dir = os.path.join(os.path.dirname(__file__), "traces")
-        trace_dir = config['trace_dir']
+        trace_dir = self.config['trace_dir']
         self.trace_set = glob.glob('{trace_dir}/**/*.json', recursive=True)
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float64)
         self.observation_space = spaces.Box(
@@ -61,27 +64,33 @@ class GymEnv:
             high=np.ones((STATE_DIMENSION, HISTORY_LENGTH)),
             dtype=np.float64)
 
+        self.state = torch.zeros((1, self.config['state_dim'], self.config['state_length']))
+        self.receiving_rate_list = []
+        self.delay_list = []
+        self.loss_ratio_list = []
+
     def reset(self):
         self.gym_env.reset(trace_path=random.choice(self.trace_set), report_interval_ms=self.step_time,
                            duration_time_ms=0)
         self.packet_record.reset()
-        self.receiving_rate = np.zeros(HISTORY_LENGTH)
-        self.delay = np.zeros(HISTORY_LENGTH)
-        self.loss_ratio = np.zeros(HISTORY_LENGTH)
-        self.prediction_history = np.zeros(HISTORY_LENGTH)
+        # self.receiving_rate = np.zeros(HISTORY_LENGTH)
+        # self.delay = np.zeros(HISTORY_LENGTH)
+        # self.loss_ratio = np.zeros(HISTORY_LENGTH)
+        # self.prediction_history = np.zeros(HISTORY_LENGTH)
 
-        states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
-
-        return states
+        # states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
+        self.state = torch.zeros((1, self.config['state_dim'], self.config['state_length']))
+        # return states
 
     def get_reward(self):
-        reward = self.receiving_rate[HISTORY_LENGTH-1] - self.delay[HISTORY_LENGTH-1] - self.loss_ratio[HISTORY_LENGTH-1]
-
+        # reward = self.receiving_rate[HISTORY_LENGTH-1] - self.delay[HISTORY_LENGTH-1] - self.loss_ratio[HISTORY_LENGTH-1]
+        reward = self.receiving_rate - self.delay - self.loss_ratio
         return reward
 
     def step(self, action):
         # action: log to linear
-        bandwidth_prediction = log_to_linear(action)
+        # bandwidth_prediction = log_to_linear(action)
+        bandwidth_prediction = action
 
         # run the action, get related packet list:
         packet_list, done = self.gym_env.step(bandwidth_prediction)
@@ -99,26 +108,41 @@ class GymEnv:
             self.packet_record.on_receive(packet_info)
 
         # calculate state:
-        receiving_rate = self.packet_record.calculate_receiving_rate(interval=self.step_time)
+        self.receiving_rate = self.packet_record.calculate_receiving_rate(interval=self.step_time)
+        self.receiving_rate_list.append(self.receiving_rate)
         # states.append(liner_to_log(receiving_rate))
-        self.receiving_rate.append(receiving_rate)
-        np.delete(self.receiving_rate, 0, axis=0)
-        delay = self.packet_record.calculate_average_delay(interval=self.step_time)
+        # self.receiving_rate.append(receiving_rate)
+        # np.delete(self.receiving_rate, 0, axis=0)
+        self.delay = self.packet_record.calculate_average_delay(interval=self.step_time)
+        self.delay_list.append(self.delay)
         # states.append(min(delay/1000, 1))
-        self.delay.append(delay)
-        np.delete(self.delay, 0, axis=0)
-        loss_ratio = self.packet_record.calculate_loss_ratio(interval=self.step_time)
+        # self.delay.append(delay)
+        # np.delete(self.delay, 0, axis=0)
+        self.loss_ratio = self.packet_record.calculate_loss_ratio(interval=self.step_time)
+        self.loss_ratio_list.append(self.loss_ratio)
+
+        self.state = self.state.clone().detach()
+        self.state = torch.roll(self.state, -1, dims=-1)
         # states.append(loss_ratio)
-        self.loss_ratio.append(loss_ratio)
-        np.delete(self.loss_ratio, 0, axis=0)
-        latest_prediction = self.packet_record.calculate_latest_prediction()
+        # self.loss_ratio.append(loss_ratio)
+        # np.delete(self.loss_ratio, 0, axis=0)
+        # latest_prediction = self.packet_record.calculate_latest_prediction()
         # states.append(liner_to_log(latest_prediction))
-        self.prediction_history.append(latest_prediction)
-        np.delete(self.prediction_history, 0, axis=0)
-        states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
+        # self.prediction_history.append(latest_prediction)
+        # np.delete(self.prediction_history, 0, axis=0)
+        # states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
+        self.state[0, 0, -1] = self.receiving_rate / np.max(self.receiving_rate_list)
+        self.state[0, 1, -1] = self.delay / np.max(self.delay_list)
+        self.state[0, 2, -1] = self.loss_ratio / np.max(self.loss_ratio_list)
+
+        # maintain list length
+        if len(self.receiving_rate_list) == self.config['state_length']:
+            self.receiving_rate_list.pop(0)
+            self.delay_list.pop(0)
+            self.loss_ratio_list.pop(0)
 
         # calculate reward:
         reward = self.get_reward()
 
-        return states, reward, done, {}
+        return self.state, reward, done, {}
 
