@@ -9,10 +9,11 @@ kTrendlineWindowSize = 20  # 用于求解趋势斜率的样本个数，每个样
 kTrendlineSmoothingCoeff = 0.9
 kOverUsingTimeThreshold = 10
 kMaxAdaptOffsetMs = 15.0
-eta = 1.08  # increasing coeffience for AIMD
+eta = 1.08  # increasing coeffience for AIMDf
 alpha = 0.85  # decreasing coeffience for AIMD
 k_up_ = 0.0087
 k_down_ = 0.039
+
 
 class Estimator(object):
     def __init__(self):
@@ -29,7 +30,7 @@ class Estimator(object):
 
         # ----- 预测带宽相关 -----
         self.state = 'Hold'
-        self.last_bandwidth_estimation = 1e6
+        self.last_bandwidth_estimation = 500 * 1000
 
         self.gamma1 = 12.5  # 检测过载的动态阈值
         self.num_of_deltas_ = 0  # delta的累计个数
@@ -38,6 +39,9 @@ class Estimator(object):
         self.overuse_counter = 0  # 对overuse状态计数
         self.last_update_ms = -1  # 上一次更新阈值的时间
         self.now_ms = -1  # 当前系统时间
+
+        with open("debug.log", 'r+') as f:
+            f.truncate()
 
     def report_states(self, stats: dict):
         '''
@@ -59,7 +63,7 @@ class Estimator(object):
         packet_info.bandwidth_prediction = self.last_bandwidth_estimation
         self.now_ms = packet_info.receive_timestamp  # 以最后一个包的到达时间作为系统时间
 
-        with open('debug.log','a+') as f:
+        with open('debug.log', 'a+') as f:
             assert (isinstance(stats, dict))
             f.write(str(stats))
             f.write('\n')
@@ -71,38 +75,107 @@ class Estimator(object):
         计算估计带宽
         :return: 估计带宽 bandwidth_estimation
         '''
+        BWE_by_delay, flag = self.get_estimated_bandwidth_by_delay()
+        BWE_by_loss = self.get_estimated_bandwidth_by_loss()
+        bandwidth_estimation = min(BWE_by_delay, BWE_by_loss)
+        if flag == True:
+            self.packets_list = []  # 清空packets_list
+
+        with open("debug.log", 'a+') as f:
+            bwe = bandwidth_estimation / 1000
+            f.write("Current BWE = " + str(int(bwe)) + " kbps" + '\n')
+            f.write("=============================================================\n")
+        self.last_bandwidth_estimation = bandwidth_estimation
+        return bandwidth_estimation
+
+    def get_estimated_bandwidth_by_delay(self):
+        '''
+        基于延迟的带宽预测
+        :return: 基于延迟的估计带宽 bandwidth_estimation / 是否进行有效估计 flag
+        '''
         if len(self.packets_list) == 0:  # 若该时间间隔内未收到包,则返回上一次带宽预测结果
-            return self.last_bandwidth_estimation
+            return self.last_bandwidth_estimation, False
 
         # 1. 分包组
         pkt_group_list = self.divide_packet_group()
         if len(pkt_group_list) < 2:  # 若仅有一个包组，返回上一次带宽预测结果
-            return self.last_bandwidth_estimation
+            return self.last_bandwidth_estimation, False
 
         # 2. 计算包组梯度
         send_time_delta_list, _, _, delay_gradient_list = self.compute_deltas_for_pkt_group(pkt_group_list)
         with open('debug.log', 'a+') as f:
-            f.write("delay_gradient_list = "+str(delay_gradient_list)+"\n")
+            f.write("delay_gradient_list = " + str(delay_gradient_list) + "\n")
 
         # 3. 计算斜率
         trendline = self.trendline_filter(delay_gradient_list, pkt_group_list)
-        if trendline == None:   # 当窗口中样本数不够时，返回上一次带宽预测结果
-            return self.last_bandwidth_estimation
+        if trendline == None:  # 当窗口中样本数不够时，返回上一次带宽预测结果
+            return self.last_bandwidth_estimation, False
 
         # 4. 判断当前网络状态
         overuse_flag = self.overuse_detector(trendline, send_time_delta_list[-1])
         print("current overuse_flag : " + str(overuse_flag))
         # 5. 给出带宽调整方向
         state = self.state_transfer(overuse_flag)
-        print("current state : "+str(state))
+        print("current state : " + str(state))
         # 6. 调整带宽
-        bandwidth_estimation = self.rate_adaptation(state)
-        self.last_bandwidth_estimation = bandwidth_estimation
-        self.packets_list = []  # 清空packets_list
+        bandwidth_estimation = self.rate_adaptation_by_delay(state)
 
         with open("debug.log", 'a+') as f:
-            f.write("Current BWE = " + str(int(bandwidth_estimation)) + '\n')
-            f.write("=============================================================\n")
+            bwe = bandwidth_estimation / 1000
+            f.write("BWE by delay = " + str(int(bwe)) + " kbps" + ' ｜ ')
+        return bandwidth_estimation, True
+
+    def get_estimated_bandwidth_by_loss(self) -> int:
+        '''
+        基于丢包的带宽预测
+        :return:基于丢包的估计带宽 bandwidth_estimation
+        '''
+        loss_rate = self.caculate_loss_rate()
+        if loss_rate == -1:
+            print("len(self.packets_list) == 0")
+            return self.last_bandwidth_estimation
+
+        bandwidth_estimation = self.rate_adaptation_by_loss(loss_rate)
+
+        with open("debug.log", 'a+') as f:
+            bwe = bandwidth_estimation / 1000
+            f.write("BWE by loss = " + str(int(bwe)) + " kbps" + '\n')
+        return bandwidth_estimation
+
+    def caculate_loss_rate(self):
+        '''
+        计算该时段内的丢包率
+        :return: 丢包率 loss_rate
+        '''
+        flag = False                                   # 标志是否获得第一个有效包
+        valid_packets_num = 0
+        min_sequence_number, max_sequence_number = 0, 0
+        if len(self.packets_list) == 0:                # 该时间间隔内无包到达
+            return -1   
+        for i in range(len(self.packets_list)):
+            if self.packets_list[i].payload_type == 126:
+                if not flag:
+                    min_sequence_number = self.packets_list[i].sequence_number
+                    max_sequence_number = self.packets_list[i].sequence_number
+                    flag = True
+                valid_packets_num += 1
+                min_sequence_number = min(min_sequence_number, self.packets_list[i].sequence_number)
+                max_sequence_number = max(max_sequence_number, self.packets_list[i].sequence_number)
+        receive_rate = valid_packets_num / (max_sequence_number - min_sequence_number)
+        loss_rate = 1 - receive_rate
+        return loss_rate
+
+    def rate_adaptation_by_loss(self, loss_rate) -> int:
+        '''
+        根据丢包率计算估计带宽
+        :param loss_rate: 丢包率
+        :return: 基于丢包的预测带宽 bandwidth_estimation
+        '''
+        bandwidth_estimation = self.last_bandwidth_estimation
+        if loss_rate > 0.1:
+            bandwidth_estimation = self.last_bandwidth_estimation * (1 - 0.5 * loss_rate)
+        elif loss_rate < 0.02:
+            bandwidth_estimation = 1.05 * self.last_bandwidth_estimation
         return bandwidth_estimation
 
     def divide_packet_group(self):
@@ -126,7 +199,7 @@ class Estimator(object):
                 pkt_group = [pkt]
         pkt_group_list.append(PacketGroup(pkt_group))
         with open('debug.log', 'a+') as f:
-            f.write("num of groups = "+str(len(pkt_group_list))+'\n')
+            f.write("num of groups = " + str(len(pkt_group_list)) + '\n')
 
         return pkt_group_list
 
@@ -198,7 +271,7 @@ class Estimator(object):
             return overuse_flag
 
         modified_trend = trendline * min(self.num_of_deltas_, kMinNumDeltas) * threshold_gain_
-        print("modified_trend = "+str(modified_trend))
+        print("modified_trend = " + str(modified_trend))
 
         if modified_trend > self.gamma1:
             if self.time_over_using == -1:
@@ -278,7 +351,7 @@ class Estimator(object):
         self.state = newstate
         return newstate
 
-    def rate_adaptation(self, state):
+    def rate_adaptation_by_delay(self, state):
         '''
         根据当前状态（hold, increase, decrease），决定最后的码率
         :param state: （hold, increase, decrease）
