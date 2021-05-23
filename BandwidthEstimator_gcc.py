@@ -29,13 +29,14 @@ class Estimator(object):
 
         # ----- 预测带宽相关 -----
         self.state = 'Hold'
-        self.last_bandwidth_estimation = 500 * 1000
+        self.last_bandwidth_estimation = 100 * 1000
 
         self.gamma1 = 12.5  # 检测过载的动态阈值
         self.num_of_deltas_ = 0  # delta的累计个数
         self.time_over_using = -1  # 记录over_using的时间
         self.prev_trend = 0.0  # 前一个trend
         self.overuse_counter = 0  # 对overuse状态计数
+        self.overuse_flag='NORMAL'
         self.last_update_ms = -1  # 上一次更新阈值的时间
         self.now_ms = -1  # 当前系统时间
 
@@ -129,10 +130,10 @@ class Estimator(object):
             return self.last_bandwidth_estimation, False
 
         # 4. 判断当前网络状态
-        overuse_flag = self.overuse_detector(trendline, send_time_delta_list[-1])
-        print("current overuse_flag : " + str(overuse_flag))
+        self.overuse_detector(trendline, send_time_delta_list[-1])
+        print("current overuse_flag : " + str(self.overuse_flag))
         # 5. 给出带宽调整方向
-        state = self.state_transfer(overuse_flag)
+        state = self.state_transfer()
         print("current state : " + str(state))
         # 6. 调整带宽
         bandwidth_estimation = self.rate_adaptation_by_delay(state)
@@ -254,13 +255,21 @@ class Estimator(object):
             accumulated_delay = self.acc_delay + delay_gradient
             smoothed_delay = kTrendlineSmoothingCoeff * self.smoothed_delay + (
                     1 - kTrendlineSmoothingCoeff) * accumulated_delay
+
             self.acc_delay = accumulated_delay
             self.smoothed_delay = smoothed_delay
-            self.acc_delay_list.append(pkt_group_list[i + 1].complete_time - self.first_group_complete_time)
-            self.smoothed_delay_list.append(smoothed_delay)
+
+            arrival_time_ms = pkt_group_list[i + 1].complete_time                   # acc_delay_list
+            self.acc_delay_list.append(arrival_time_ms - self.first_group_complete_time)
+
+            self.smoothed_delay_list.append(smoothed_delay)                         # smoothed_delay_list
             if len(self.acc_delay_list) > kTrendlineWindowSize:
                 self.acc_delay_list.popleft()
                 self.smoothed_delay_list.popleft()
+        with open("debug.log",'a+') as f:
+            f.write("acc_delay_list : "+str(self.acc_delay_list)+'\n')
+            f.write("smoothed_delay_list : "+str(self.smoothed_delay_list)+'\n')
+
         if len(self.acc_delay_list) == kTrendlineWindowSize:
             avg_acc_delay = sum(self.acc_delay_list) / len(self.acc_delay_list)
             avg_smoothed_delay = sum(self.smoothed_delay_list) / len(self.smoothed_delay_list)
@@ -275,6 +284,10 @@ class Estimator(object):
             trendline = numerator / denominator
         else:
             trendline = None
+            self.acc_delay_list.clear()
+            self.smoothed_delay_list.clear()
+            self.acc_delay = 0
+            self.smoothed_delay = 0
         return trendline
 
     def overuse_detector(self, trendline, ts_delta):
@@ -282,15 +295,17 @@ class Estimator(object):
         根据滤波器计算的趋势斜率，判断当前是否处于过载状态
         :param trendline: 趋势斜率
         :param ts_delta: 发送时间间隔
-        :return: overuseflag - 'OVERUSE'  # 'NORMAL', 'UNDERUSE'
         '''
+        self.overuse_flag='NORMAL'
         now_ms = self.now_ms
-        overuse_flag = 'NORMAL'
         if self.num_of_deltas_ < 2:
-            return overuse_flag
+            return
 
         modified_trend = trendline * min(self.num_of_deltas_, kMinNumDeltas) * threshold_gain_
         print("modified_trend = " + str(modified_trend))
+
+        with open("debug.log",'a+') as f:
+            f.write("trendline = "+ str(trendline)+" | prev_trendline = "+str(self.prev_trend) +'\n'+"modified_trend = "+str(modified_trend)+" | threshold = "+str(self.gamma1)+'\n')
 
         if modified_trend > self.gamma1:
             if self.time_over_using == -1:
@@ -302,19 +317,25 @@ class Estimator(object):
                 if trendline > self.prev_trend:
                     self.time_over_using = 0
                     self.overuse_counter = 0
-                    overuse_flag = 'OVERUSE'
-            elif modified_trend < -self.gamma1:
-                self.time_over_using = -1
-                self.overuse_counter = 0
-                overuse_flag = 'UNDERUSE'
+                    self.overuse_flag = 'OVERUSE'
+                # self.time_over_using = 0
+                # self.overuse_counter = 0
+                # self.overuse_flag = 'OVERUSE'
+        elif modified_trend < -self.gamma1:
+            self.time_over_using = -1
+            self.overuse_counter = 0
+            self.overuse_flag = 'UNDERUSE'
         else:
             self.time_over_using = -1
             self.overuse_counter = 0
-            overuse_flag = 'NORMAL'
+            self.overuse_flag = 'NORMAL'
 
         self.prev_trend = trendline
         self.update_threthold(modified_trend, now_ms)  # 更新判断过载的阈值
-        return overuse_flag
+
+        with open("debug.log",'a+') as f:
+            f.write("overuse_flag = "+self.overuse_flag+'\n')
+
 
     def update_threthold(self, modified_trend, now_ms):
         '''
@@ -328,27 +349,27 @@ class Estimator(object):
         if abs(modified_trend) > self.gamma1 + kMaxAdaptOffsetMs:
             self.last_update_ms = now_ms
             return
-
         if abs(modified_trend) < self.gamma1:
             k = k_down_
         else:
             k = k_up_
         kMaxTimeDeltaMs = 100
         time_delta_ms = min(now_ms - self.last_update_ms, kMaxTimeDeltaMs)
-        self.gamma1 = k * (abs(modified_trend) - self.gamma1) * time_delta_ms
-        if (self.gamma1 < 6):
-            self.gamma1 = 6
+        self.gamma1 += k * (abs(modified_trend) - self.gamma1) * time_delta_ms
+        if (self.gamma1 < 2):   # todo:6 or 3 or 2?
+            self.gamma1 = 2
         elif (self.gamma1 > 600):
             self.gamma1 = 600
         self.last_update_ms = now_ms
 
-    def state_transfer(self, overuse_flag):
+    def state_transfer(self):
         '''
         更新发送码率调整方向
         :param overuse_flag: 网络状态
         :return: 新的调整方向
         '''
         newstate = None
+        overuse_flag=self.overuse_flag
         if self.state == 'Decrease' and overuse_flag == 'OVERUSE':
             newstate = 'Decrease'
         elif self.state == 'Decrease' and (overuse_flag == 'NORMAL' or overuse_flag == 'UNDERUSE'):
@@ -410,4 +431,4 @@ class PacketGroup:
         self.pkt_group_size = sum([pkt.size for pkt in pkt_group])
         self.pkt_num_in_group = len(pkt_group)
         self.complete_time = self.arrival_time_list[-1]
-        self.transfer_duration = self.arrival_time_list[-1] - self.arrival_time_list[0]  # todo：当包组只有一个包时这样计算会有问题
+        self.transfer_duration = self.arrival_time_list[-1] - self.arrival_time_list[0]
