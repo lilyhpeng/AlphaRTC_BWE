@@ -29,14 +29,18 @@ class Estimator(object):
 
         # ----- 预测带宽相关 -----
         self.state = 'Hold'
-        self.last_bandwidth_estimation = 100 * 1000
+        self.last_bandwidth_estimation = 200 * 1000
+        self.avg_max_bitrate_kbps_ = -1  # 最大码率的指数移动均值
+        self.var_max_bitrate_kbps_ = -1  # 最大码率的方差
+        self.rate_control_region_ = "kRcMaxUnknown"
+        self.time_last_bitrate_change_ = -1  # 上一次变比特率的时间
 
         self.gamma1 = 12.5  # 检测过载的动态阈值
         self.num_of_deltas_ = 0  # delta的累计个数
         self.time_over_using = -1  # 记录over_using的时间
         self.prev_trend = 0.0  # 前一个trend
         self.overuse_counter = 0  # 对overuse状态计数
-        self.overuse_flag='NORMAL'
+        self.overuse_flag = 'NORMAL'
         self.last_update_ms = -1  # 上一次更新阈值的时间
         self.now_ms = -1  # 当前系统时间
 
@@ -44,9 +48,9 @@ class Estimator(object):
             f.write("========================== debug.log =========================\n")
         with open("bandwidth_estimated.txt", 'w') as f:
             f.write("========================== bandwidth_estimated.txt =========================\n")
-        with open("bandwidth_estimated_by_loss.txt",'w') as f:
+        with open("bandwidth_estimated_by_loss.txt", 'w') as f:
             f.write("========================== bandwidth_estimated_by_loss.txt =========================\n")
-        with open("bandwidth_estimated_by_delay.txt",'w') as f:
+        with open("bandwidth_estimated_by_delay.txt", 'w') as f:
             f.write("========================== bandwidth_estimated_by_delay.txt =========================\n")
 
     def report_states(self, stats: dict):
@@ -82,12 +86,12 @@ class Estimator(object):
         :return: 估计带宽 bandwidth_estimation
         '''
         BWE_by_delay, flag = self.get_estimated_bandwidth_by_delay()
-        with open("bandwidth_estimated_by_delay.txt",'a+') as f:
+        with open("bandwidth_estimated_by_delay.txt", 'a+') as f:
             bwe_delay = BWE_by_delay / 1000
             f.write(str(int(bwe_delay)) + '\n')
 
         BWE_by_loss = self.get_estimated_bandwidth_by_loss()
-        with open("bandwidth_estimated_by_loss.txt",'a+') as f:
+        with open("bandwidth_estimated_by_loss.txt", 'a+') as f:
             bwe_loss = BWE_by_loss / 1000
             f.write(str(int(bwe_loss)) + '\n')
 
@@ -259,16 +263,16 @@ class Estimator(object):
             self.acc_delay = accumulated_delay
             self.smoothed_delay = smoothed_delay
 
-            arrival_time_ms = pkt_group_list[i + 1].complete_time                   # acc_delay_list
+            arrival_time_ms = pkt_group_list[i + 1].complete_time  # acc_delay_list
             self.acc_delay_list.append(arrival_time_ms - self.first_group_complete_time)
 
-            self.smoothed_delay_list.append(smoothed_delay)                         # smoothed_delay_list
+            self.smoothed_delay_list.append(smoothed_delay)  # smoothed_delay_list
             if len(self.acc_delay_list) > kTrendlineWindowSize:
                 self.acc_delay_list.popleft()
                 self.smoothed_delay_list.popleft()
-        with open("debug.log",'a+') as f:
-            f.write("acc_delay_list : "+str(self.acc_delay_list)+'\n')
-            f.write("smoothed_delay_list : "+str(self.smoothed_delay_list)+'\n')
+        with open("debug.log", 'a+') as f:
+            f.write("acc_delay_list : " + str(self.acc_delay_list) + '\n')
+            f.write("smoothed_delay_list : " + str(self.smoothed_delay_list) + '\n')
 
         if len(self.acc_delay_list) == kTrendlineWindowSize:
             avg_acc_delay = sum(self.acc_delay_list) / len(self.acc_delay_list)
@@ -296,7 +300,7 @@ class Estimator(object):
         :param trendline: 趋势斜率
         :param ts_delta: 发送时间间隔
         '''
-        self.overuse_flag='NORMAL'
+        self.overuse_flag = 'NORMAL'
         now_ms = self.now_ms
         if self.num_of_deltas_ < 2:
             return
@@ -304,8 +308,10 @@ class Estimator(object):
         modified_trend = trendline * min(self.num_of_deltas_, kMinNumDeltas) * threshold_gain_
         print("modified_trend = " + str(modified_trend))
 
-        with open("debug.log",'a+') as f:
-            f.write("trendline = "+ str(trendline)+" | prev_trendline = "+str(self.prev_trend) +'\n'+"modified_trend = "+str(modified_trend)+" | threshold = "+str(self.gamma1)+'\n')
+        with open("debug.log", 'a+') as f:
+            f.write("trendline = " + str(trendline) + " | prev_trendline = " + str(
+                self.prev_trend) + '\n' + "modified_trend = " + str(modified_trend) + " | threshold = " + str(
+                self.gamma1) + '\n')
 
         if modified_trend > self.gamma1:
             if self.time_over_using == -1:
@@ -318,9 +324,6 @@ class Estimator(object):
                     self.time_over_using = 0
                     self.overuse_counter = 0
                     self.overuse_flag = 'OVERUSE'
-                # self.time_over_using = 0
-                # self.overuse_counter = 0
-                # self.overuse_flag = 'OVERUSE'
         elif modified_trend < -self.gamma1:
             self.time_over_using = -1
             self.overuse_counter = 0
@@ -333,9 +336,8 @@ class Estimator(object):
         self.prev_trend = trendline
         self.update_threthold(modified_trend, now_ms)  # 更新判断过载的阈值
 
-        with open("debug.log",'a+') as f:
-            f.write("overuse_flag = "+self.overuse_flag+'\n')
-
+        with open("debug.log", 'a+') as f:
+            f.write("overuse_flag = " + self.overuse_flag + '\n')
 
     def update_threthold(self, modified_trend, now_ms):
         '''
@@ -356,8 +358,8 @@ class Estimator(object):
         kMaxTimeDeltaMs = 100
         time_delta_ms = min(now_ms - self.last_update_ms, kMaxTimeDeltaMs)
         self.gamma1 += k * (abs(modified_trend) - self.gamma1) * time_delta_ms
-        if (self.gamma1 < 2):   # todo:6 or 3 or 2?
-            self.gamma1 = 2
+        if (self.gamma1 < 6):  # todo:6 or 3 or 2?
+            self.gamma1 = 6
         elif (self.gamma1 > 600):
             self.gamma1 = 600
         self.last_update_ms = now_ms
@@ -369,7 +371,7 @@ class Estimator(object):
         :return: 新的调整方向
         '''
         newstate = None
-        overuse_flag=self.overuse_flag
+        overuse_flag = self.overuse_flag
         if self.state == 'Decrease' and overuse_flag == 'OVERUSE':
             newstate = 'Decrease'
         elif self.state == 'Decrease' and (overuse_flag == 'NORMAL' or overuse_flag == 'UNDERUSE'):
@@ -397,16 +399,125 @@ class Estimator(object):
         :param state: （hold, increase, decrease）
         :return: 估计码率
         '''
-        bandwidth_estimation = self.last_bandwidth_estimation
+
+        with open("debug.log",'a+') as f:
+            f.write("state : "+str(state)+'\n')
+
+        estimated_throughput = 0
+        for pkt in self.packets_list:
+            estimated_throughput += pkt.size
+
+        if self.last_update_ms == -1:  # todo:estimated_throughput_bps整合到开头
+            estimated_throughput_bps = 1000 * 8 * estimated_throughput / (
+                    self.now_ms - self.packets_list[0].received_timestamp)
+        else:
+            estimated_throughput_bps = 1000 * 8 * estimated_throughput / 200
+        estimated_throughput_kbps=estimated_throughput_bps/1000
+        troughput_based_limit=1.5 * estimated_throughput_bps + 10
+        '''
+        计算最大码率标准差
+        最大码率标准差表征了链路容量 link capacity 的估计值相对于均值的波动程度。
+        '''
+        self.UpdateMaxThroughputEstimate(estimated_throughput_kbps)
+        std_max_bit_rate = pow(self.var_max_bitrate_kbps_ * self.avg_max_bitrate_kbps_, 0.5)
+
         if state == 'Increase':
-            bandwidth_estimation = eta * self.last_bandwidth_estimation
+            # 两个状态，在最大值附近，比最大值高到不知道哪里去
+            if self.avg_max_bitrate_kbps_ >= 0 and \
+                    estimated_throughput_kbps > self.avg_max_bitrate_kbps_ + 3 * std_max_bit_rate:
+                self.avg_max_bitrate_kbps_ = -1.0
+                self.rate_control_region_ = "kRcMaxUnknown"
+
+            if self.rate_control_region_ == "kRcNearMax":
+                with open("debug.log",'a+') as f:
+                    f.write("rate_control_region_ == kRcNearMax\n")
+                # 已经接近最大值了，此时增长需谨慎，加性增加
+                additive_increase_bps = self.AdditiveRateIncrease(self.now_ms, self.time_last_bitrate_change_)
+                bandwidth_estimation = self.last_bandwidth_estimation + additive_increase_bps
+            elif self.rate_control_region_ == "kRcMaxUnknown":
+                with open("debug.log",'a+') as f:
+                    f.write("rate_control_region_ == kRcMaxUnknown\n")
+                multiplicative_increase_bps = self.MultiplicativeRateIncrease(self.now_ms,
+                                                                              self.time_last_bitrate_change_)
+                bandwidth_estimation = self.last_bandwidth_estimation + multiplicative_increase_bps
+            else:
+                print("error!")
+            bandwidth_estimation = min(bandwidth_estimation,troughput_based_limit)
+            self.time_last_bitrate_change_ = self.now_ms
         elif state == 'Decrease':
-            bandwidth_estimation = alpha * self.last_bandwidth_estimation
+            beta = 0.85
+            bandwidth_estimation = beta * estimated_throughput_bps + 0.5
+            if bandwidth_estimation > self.last_bandwidth_estimation:
+                if self.rate_control_region_ != "kRcMaxUnknown":
+                    bandwidth_estimation = (beta * self.avg_max_bitrate_kbps_ * 1000 + 0.5)
+                bandwidth_estimation = min(bandwidth_estimation, self.last_bandwidth_estimation)
+            self.rate_control_region_ = "kRcNearMax"
+            if estimated_throughput_kbps < self.avg_max_bitrate_kbps_-3*std_max_bit_rate:
+                self.avg_max_bitrate_kbps_ = -1
+
+            self.UpdateMaxThroughputEstimate(estimated_throughput_kbps)
+
+            self.state='Hold'
+            self.time_last_bitrate_change_ = self.now_ms
         elif state == 'Hold':
             bandwidth_estimation = self.last_bandwidth_estimation
         else:
             print('Wrong State!')
         return bandwidth_estimation
+
+    def AdditiveRateIncrease(self, now_ms, last_ms):
+        '''
+        执行加性码率增长算法
+        '''
+        # 计算平均包大小
+        sum_packet_size, avg_packet_size = 0, 0
+        for pkt in self.packets_list:
+            sum_packet_size += pkt.size
+        avg_packet_size = 8 * sum_packet_size / len(self.packets_list)
+
+        beta = 0
+        RTT = 2 * (self.packets_list[-1].receive_timestamp - self.packets_list[-1].send_timestamp)
+        if last_ms > 0:
+            beta = min(((now_ms - last_ms) / RTT), 1.0)
+        additive_increase_bps = min(1000.0, beta * avg_packet_size)
+        return additive_increase_bps
+
+    def MultiplicativeRateIncrease(self, now_ms, last_ms):  # todo : last_ms
+        '''
+        执行乘性增大算法
+        :param now_ms: 当前时间
+        :param last_ms: 上次码率被更新的时间
+        :return: 增加的码率大小
+        '''
+        alpha = 1.08
+        if last_ms > -1:
+            time_since_last_update_ms = min(now_ms - last_ms, 1000)
+            alpha = pow(alpha, time_since_last_update_ms / 1000)
+        multiplicative_increase_bps = max(self.last_bandwidth_estimation * (alpha - 1.0), 1000.0)
+        return multiplicative_increase_bps
+
+    def UpdateMaxThroughputEstimate(self, estimated_throughput_kbps):
+        '''
+        输入网络带宽过载状态下的码率估计值 estimated_throughput_kbps，计算网络链路容量的方差。
+        '''
+        # 一次指数平滑法计算最大码率的指数移动均值
+        alpha = 0.05
+        if self.avg_max_bitrate_kbps_==-1:
+            self.avg_max_bitrate_kbps_=estimated_throughput_kbps
+        else:
+            self.avg_max_bitrate_kbps_ = (1 - alpha) * self.avg_max_bitrate_kbps_ + alpha * estimated_throughput_kbps
+        # 一次指数平滑法计算最大码率的方差
+        norm = max(self.avg_max_bitrate_kbps_, 1.0)
+        var_value = pow((self.avg_max_bitrate_kbps_ - estimated_throughput_kbps), 2) / norm  # 归一化
+        if self.var_max_bitrate_kbps_==-1:
+            self.var_max_bitrate_kbps_=var_value
+        else:
+            self.var_max_bitrate_kbps_ = (1 - alpha) * self.var_max_bitrate_kbps_ + alpha * var_value
+        # 将归一化后的方差控制到 [0.4, 2.5] 区间范围之内
+        if self.var_max_bitrate_kbps_ < 0.4:
+            self.var_max_bitrate_kbps_ = 0.4
+        if self.var_max_bitrate_kbps_ > 2.5:
+            self.var_max_bitrate_kbps_ = 2.5
 
 
 class PacketInfo:
