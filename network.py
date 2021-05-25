@@ -1,4 +1,4 @@
-import tflearn
+# import tflearn
 # import tensorflow as tf
 import torch
 import torch.nn as nn
@@ -12,7 +12,7 @@ class ActorNetwork(nn.Module):
     def __init__(self, config):
         super(ActorNetwork, self).__init__()
         self.device = config['device']
-        self.lr_rate = config['learning_rate']
+        self.lr_rate = config['actor_learning_rate']
         self.s_dim = config['state_dim']
         self.s_info = config['state_length']
         self.a_dim = config['action_dim']
@@ -62,7 +62,7 @@ class CriticNetwork(nn.Module):
     def __init__(self, config):
         super(CriticNetwork, self).__init__()
         self.device = config['device']
-        self.lr_rate = config['learning_rate']
+        self.lr_rate = config['critic_learning_rate']
         self.s_dim = config['state_dim']
         self.s_info = config['state_length']
         self.a_dim = config['action_dim']

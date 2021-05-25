@@ -6,7 +6,7 @@ import os
 import random
 import numpy as np
 import glob
-from Queue import Queue
+from queue import Queue
 import gym
 from gym import spaces
 import torch
@@ -42,7 +42,7 @@ def log_to_linear(value):
 
 class GymEnv:
     def __init__(self, env_id, config, step_time=60):
-        self.env_id = env_id
+        self.env_id = str(env_id)
         self.step_time = step_time
         self.gym_env = alphartc_gym.Gym(self.env_id)
         self.packet_record = PacketRecord()
@@ -57,7 +57,7 @@ class GymEnv:
 
         # trace_dir = os.path.join(os.path.dirname(__file__), "traces")
         trace_dir = self.config['trace_dir']
-        self.trace_set = glob.glob('{trace_dir}/**/*.json', recursive=True)
+        self.trace_set = glob.glob('{}/*/*.json'.format(trace_dir), recursive=True)
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float64)
         self.observation_space = spaces.Box(
             low=np.zeros((STATE_DIMENSION, HISTORY_LENGTH)),

@@ -31,7 +31,7 @@ def load_config():
         'sending_rate': [300,750,1200,1850,2850,4300],
         'entropy_weight': 0.5,
 
-        'trace_dir': './traces',
+        'trace_dir': './traces/origin',
         'log_dir': './logs',
         'model_dir': './models'
     }

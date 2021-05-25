@@ -36,7 +36,7 @@ def central_agent(net_params_queue, exp_queues, config):
     else:
         net.ActorNetwork.init_params()
         net.CriticNetwork.init_params()
-        actor_net_params = net.ActorNetwork.state_dict()
+        actor_net_params = net.ActorNetwork.parameters()
 
     epoch = 0
     total_reward = 0.0
@@ -70,7 +70,6 @@ def central_agent(net_params_queue, exp_queues, config):
 
 
 def agent(net_params_queue, exp_queues, config, id):
-    # todo: gym_id has not considered
     env = GymEnv(env_id=id, config=config)
     env.reset()
 
