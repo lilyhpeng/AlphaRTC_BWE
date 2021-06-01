@@ -15,8 +15,6 @@ from rtc_env import GymEnv
 def central_agent(net_params_queue, exp_queues, config):
     torch.set_num_threads(1)
 
-    start = time.time()
-
     # log training info
     logging.basicConfig(filename=config['log_dir'] + '/Central_agent_training.log', filemode='w', level=logging.INFO)
 
@@ -28,8 +26,8 @@ def central_agent(net_params_queue, exp_queues, config):
     # since the original pensieve does not use critic in workers
     # push actor_net_params into net_params_queue only, and save parameters regarding both networks separately
     if config['load_model']:
-        actor_net_params = torch.load(config['saved_actor_model_path'])
-        critic_net_params = torch.load(config['saved_critic_model_path'])
+        actor_net_params = torch.load(config['model_dir'] + '/actor_300k1_80.pt')
+        critic_net_params = torch.load(config['model_dir'] + '/critic_300k1_80.pt')
         net.ActorNetwork.load_state_dict(actor_net_params)
         net.CriticNetwork.load_state_dict(critic_net_params)
     else:
@@ -63,16 +61,19 @@ def central_agent(net_params_queue, exp_queues, config):
 
         net.updateNetwork()
         epoch += 1
-        avg_reward = total_reward / config['num_agents']
+        avg_reward = total_reward / total_batch_len / config['num_agents']
 
         logging.info('Epoch ' + str(epoch) +
-                     'Average reward: ' + str(avg_reward))
+                     '\nAverage reward: ' + str(avg_reward))
+
+        total_reward = 0.0
+        total_batch_len = 0
 
         if epoch % config['save_interval'] == 0:
             print('Train Epoch ' + str(epoch) + ', Model restored.')
             print('Epoch costs ' + str(time.time() - start) + ' seconds.')
-            torch.save(net.ActorNetwork.state_dict(), config['model_dir'] + '/actor_' + str(epoch) + '.pt')
-            torch.save(net.CriticNetwork.state_dict(), config['model_dir'] + '/critic_' + str(epoch) + '.pt')
+            torch.save(net.ActorNetwork.state_dict(), config['model_dir'] + '/actor_300k2_' + str(epoch) + '.pt')
+            torch.save(net.CriticNetwork.state_dict(), config['model_dir'] + '/critic_300k2_' + str(epoch) + '.pt')
 
 
 def agent(net_params_queue, exp_queues, config, id):
@@ -99,15 +100,6 @@ def agent(net_params_queue, exp_queues, config, id):
             target_param.data.copy_(source_param.data)
         # todo: Agent interact with gym
         # ignore the first bwe and state since we don't have the ability to control it
-            #
-            # # synchronize the network parameters from the coordinator
-            # actor_network_params = net_params_queue.get()
-            # for target_param, source_param in zip(net.ActorNetwork.parameters(), actor_network_params):
-            #     target_param.data.copy_(source_param.data)
-            #
-            # del s_batch[:]
-            # del a_batch[:]
-            # del r_batch[:]
 
         while not done:
             state, reward, done, _ = env.step(bwe)  # todo: the shape of state needs to be regulated
@@ -119,14 +111,11 @@ def agent(net_params_queue, exp_queues, config, id):
             s_batch.append(state)
             a_batch.append(action)
 
-        exp_queues.put([s_batch,
-                        a_batch,
-                        r_batch,
+        exp_queues.put([s_batch[1:],
+                        a_batch[1:],
+                        r_batch[1:],
                         done])
 
-        #
-        #
-        # # todo: need to be fixed
         # if len(r_batch) >= config['train_seq_length'] or done:
         #     exp_queues.put([s_batch,
         #                     a_batch,

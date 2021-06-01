@@ -102,7 +102,7 @@ class Estimator(object):
             self.packets_list = []  # 清空packets_list
 
         with open("debug.log", 'a+') as f:
-            bwe = bandwidth_estimation / 1000
+            bwe = btandwidth_estimation / 1000
             f.write("Current BWE = " + str(int(bwe)) + " kbps" + '\n')
             f.write("=============================================================\n")
         with open("bandwidth_estimated.txt", 'a+') as f:

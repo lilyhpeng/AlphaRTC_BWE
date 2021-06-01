@@ -7,7 +7,7 @@ from torch.distributions import Categorical
 from network import ActorNetwork, CriticNetwork
 
 class ActorCritic():
-    def __init__(self, is_central, config):
+    def __init__(self, is_central=False, config=None):
         self.config = config
         self.ActorNetwork = self.getActorNetwork()
         self.CriticNetwork = self.getCriticNetwork()

@@ -12,8 +12,8 @@ def load_config():
         #todo: add parameters regarding configuration
         'actor_learning_rate': 0.01,
         'critic_learning_rate': 0.001,
-        'num_agents': 4,
-        'save_interval': 10,
+        'num_agents': 16,
+        'save_interval': 20,
 
         'default_bwe': 1,
         'train_seq_length': 1000,
@@ -22,13 +22,13 @@ def load_config():
         'action_dim': 6,
         'device': 'cpu',
         'discount_factor': 0.99,
-        'load_model': False,
+        'load_model': True,
         'saved_actor_model_path': '',
         'saved_critic_model_path': '',
         'layer1_shape': 128,
         'layer2_shape': 128,
 
-        'sending_rate': [100000, 110000, 120000, 150000, 200000, 220000],
+        'sending_rate': [200000, 250000, 300000, 350000, 400000, 450000],
         'entropy_weight': 0,
 
         'trace_dir': './traces',
