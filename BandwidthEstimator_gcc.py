@@ -225,7 +225,7 @@ class Estimator(object):
                     self.first_group_complete_time = pkt_group[-1].receive_timestamp
                 first_send_time_in_group = pkt.send_timestamp
                 pkt_group = [pkt]
-        pkt_group_list.append(PacketGroup(pkt_group))
+        # pkt_group_list.append(PacketGroup(pkt_group))
         with open('debug.log', 'a+') as f:
             f.write("num of groups = " + str(len(pkt_group_list)) + '\n')
 
