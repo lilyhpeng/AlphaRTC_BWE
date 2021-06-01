@@ -13,6 +13,7 @@ class Estimator(object):
         self.packet_record = PacketRecord()
         self.send_rate_list = self.config['sending_rate']
         self.model = ActorCritic(config=self.config)
+        # load model here
         actor_params = torch.load('./models/actor_300k2_160.pt')
         self.model.ActorNetwork.load_state_dict(actor_params)
 
