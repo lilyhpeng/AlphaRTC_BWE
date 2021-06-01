@@ -70,7 +70,7 @@ def central_agent(net_params_queue, exp_queues, config):
 
         if epoch % config['save_interval'] == 0:
             print('Train Epoch ' + str(epoch) + ', Model restored.')
-            print('Epoch costs' + str(time.time() - start) + 'seconds.')
+            print('Epoch costs ' + str(time.time() - start) + ' seconds.')
             torch.save(net.ActorNetwork.state_dict(), config['model_dir'] + '/actor_' + str(epoch) + '.pt')
             torch.save(net.CriticNetwork.state_dict(), config['model_dir'] + '/critic_' + str(epoch) + '.pt')
 
@@ -79,34 +79,25 @@ def agent(net_params_queue, exp_queues, config, id):
     torch.set_num_threads(1)
 
     env = GymEnv(env_id=id, config=config)
-    env.reset()
 
     net = ActorCritic(False, config)
     send_rate_list = config['sending_rate']
     default_bwe_idx = config['default_bwe']
 
-    s_batch = []
-    a_batch = []
-    r_batch = []
-
-    bwe = send_rate_list[default_bwe_idx]
-
-
     # experience RTC if not forced to stop
     while True:
-        # todo: Agent interact with gym
+        env.reset()
+        action = default_bwe_idx
+        bwe = send_rate_list[action]
+        s_batch = []
+        a_batch = []
+        r_batch = []
+
+        done = False
         actor_network_params = net_params_queue.get()
         for target_param, source_param in zip(net.ActorNetwork.parameters(), actor_network_params):
             target_param.data.copy_(source_param.data)
-
-
-        state, reward, done, _ = env.step(bwe)  # todo: the shape of state needs to be regulated
-
-        r_batch.append(reward)
-
-        action, entropy = net.predict(state)
-        bwe = send_rate_list[action]
-
+        # todo: Agent interact with gym
         # ignore the first bwe and state since we don't have the ability to control it
             #
             # # synchronize the network parameters from the coordinator
@@ -118,23 +109,40 @@ def agent(net_params_queue, exp_queues, config, id):
             # del a_batch[:]
             # del r_batch[:]
 
-        # todo: need to be fixed
-        if len(r_batch) >= config['train_seq_length'] or done:
-            exp_queues.put([s_batch,
-                            a_batch,
-                            r_batch,
-                            done])
-            action = default_bwe_idx
+        while not done:
+            state, reward, done, _ = env.step(bwe)  # todo: the shape of state needs to be regulated
+
+            r_batch.append(reward)
+
+            action, entropy = net.predict(state)
             bwe = send_rate_list[action]
-            s_batch = []
-            a_batch = []
-            r_batch = []
-            # s_batch.append(np.zeros(config['state_dim'], config['state_length']))
-            # a_batch.append(action)
-            env.reset()
-        else:
             s_batch.append(state)
             a_batch.append(action)
+
+        exp_queues.put([s_batch,
+                        a_batch,
+                        r_batch,
+                        done])
+
+        #
+        #
+        # # todo: need to be fixed
+        # if len(r_batch) >= config['train_seq_length'] or done:
+        #     exp_queues.put([s_batch,
+        #                     a_batch,
+        #                     r_batch,
+        #                     done])
+        #     action = default_bwe_idx
+        #     bwe = send_rate_list[action]
+        #     s_batch = []
+        #     a_batch = []
+        #     r_batch = []
+        #     # s_batch.append(np.zeros(config['state_dim'], config['state_length']))
+        #     # a_batch.append(action)
+        #     env.reset()
+        # else:
+        #     s_batch.append(state)
+        #     a_batch.append(action)
 
 
 
