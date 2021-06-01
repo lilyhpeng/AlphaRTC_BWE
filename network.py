@@ -20,12 +20,14 @@ class ActorNetwork(nn.Module):
         self.layer1_shape = config['layer1_shape']
         self.layer2_shape = config['layer2_shape']
 
+        self.numFcInput = 3072
+
         self.discount = config['discount_factor']
 
-        self.rConv1d = nn.Conv1d(1, self.layer1_shape, (3, 3))
-        self.dConv1d = nn.Conv1d(1, self.layer1_shape, (3, 3))
-        self.lConv1d = nn.Conv1d(1, self.layer1_shape, (3, 3))
-        self.fc = nn.Linear(self.layer1_shape * self.s_dim, self.layer2_shape)
+        self.rConv1d = nn.Conv1d(1, self.layer1_shape, 3)
+        self.dConv1d = nn.Conv1d(1, self.layer1_shape, 3)
+        self.lConv1d = nn.Conv1d(1, self.layer1_shape, 3)
+        self.fc = nn.Linear(self.numFcInput, self.layer2_shape)
         # self.h1 = nn.Linear(self.s_dim * self.s_info, self.layer1_shape)
         # self.h2 = nn.Linear(self.layer1_shape, self.layer2_shape)
         self.actor_output = nn.Linear(self.layer2_shape, self.a_dim)
@@ -47,16 +49,19 @@ class ActorNetwork(nn.Module):
         # cov_mat = torch.diag(self.action_var).to(self.config['device'])
         # x = F.leaky_relu(self.h1(inputs))
         # x = F.leaky_relu(self.h2(x))
-        receivingConv = F.leaky_relu(self.rConv1d(inputs[:, 0:1, -1]), inplace=True)
-        delayConv = F.leaky_relu(self.dConv1d(inputs[:, 1:2, -1]), inplace=True)
-        lossConv = F.leaky_relu(self.lConv1d(inputs[:, 2:3, -1]), inplace=True)
-        merge = torch.cat([receivingConv, delayConv, lossConv], 1)
-        fcOut = F.leaky_relu(self.fc(merge), inplace=True)
-        action = F.softmax(self.actor_output(fcOut))
+        receivingConv = F.relu(self.rConv1d(inputs[:, 0:1, :]), inplace=True)
+        delayConv = F.relu(self.dConv1d(inputs[:, 1:2, :]), inplace=True)
+        lossConv = F.relu(self.lConv1d(inputs[:, 2:3, :]), inplace=True)
+        receiving_flatten = receivingConv.view(receivingConv.shape[0], -1)
+        delay_flatten = delayConv.view(delayConv.shape[0], -1)
+        loss_flatten = lossConv.view(lossConv.shape[0], -1)
+        merge = torch.cat([receiving_flatten, delay_flatten, loss_flatten], 1)
+        fcOut = F.relu(self.fc(merge), inplace=True)
+        output = F.softmax(self.actor_output(fcOut), dim=-1)
         # dist = MultivariateNormal(action, cov_mat)
         # dist_entropy = dist.entropy()
         # action_logprobs = dist.log_prob(action)
-        return action
+        return output
 
 class CriticNetwork(nn.Module):
     def __init__(self, config):
@@ -70,12 +75,14 @@ class CriticNetwork(nn.Module):
         self.layer1_shape = config['layer1_shape']
         self.layer2_shape = config['layer2_shape']
 
+        self.numFcInput = 3072
+
         self.discount = config['discount_factor']
 
-        self.rConv1d = nn.Conv1d(1, self.layer1_shape, (3, 3))
-        self.dConv1d = nn.Conv1d(1, self.layer1_shape, (3, 3))
-        self.lConv1d = nn.Conv1d(1, self.layer1_shape, (3, 3))
-        self.fc = nn.Linear(self.layer1_shape * self.s_dim, self.layer2_shape)
+        self.rConv1d = nn.Conv1d(1, self.layer1_shape, 3)
+        self.dConv1d = nn.Conv1d(1, self.layer1_shape, 3)
+        self.lConv1d = nn.Conv1d(1, self.layer1_shape, 3)
+        self.fc = nn.Linear(self.numFcInput, self.layer2_shape)
         # self.h1 = nn.Linear(self.s_dim * self.s_info, self.layer1_shape)
         # self.h1 = nn.Conv2d([self.s_dim, self.s_info], self.layer1_shape, [3, 3])
         # self.a1 = nn.LeakyReLU()
@@ -95,10 +102,19 @@ class CriticNetwork(nn.Module):
                 init.constant_(m.bias.data, 0.1)
 
     def forward(self, inputs):
-        receivingConv = F.leaky_relu(self.rConv1d(inputs[:, 0:1, -1]), inplace=True)
-        delayConv = F.leaky_relu(self.dConv1d(inputs[:, 1:2, -1]), inplace=True)
-        lossConv = F.leaky_relu(self.lConv1d(inputs[:, 2:3, -1]), inplace=True)
-        merge = torch.cat([receivingConv, delayConv, lossConv], 1)
-        fcOut = F.leaky_relu(self.fc(merge), inplace=True)
+        # receivingConv = F.leaky_relu(self.rConv1d(inputs[:, 0:1, -1]), inplace=True)
+        # delayConv = F.leaky_relu(self.dConv1d(inputs[:, 1:2, -1]), inplace=True)
+        # lossConv = F.leaky_relu(self.lConv1d(inputs[:, 2:3, -1]), inplace=True)
+        # merge = torch.cat([receivingConv, delayConv, lossConv], 1)
+        # fcOut = F.leaky_relu(self.fc(merge), inplace=True)
+        # value = self.critic_output(fcOut)
+        receivingConv = F.relu(self.rConv1d(inputs[:, 0:1, :]), inplace=True)
+        delayConv = F.relu(self.dConv1d(inputs[:, 1:2, :]), inplace=True)
+        lossConv = F.relu(self.lConv1d(inputs[:, 2:3, :]), inplace=True)
+        receiving_flatten = receivingConv.view(receivingConv.shape[0], -1)
+        delay_flatten = delayConv.view(delayConv.shape[0], -1)
+        loss_flatten = lossConv.view(lossConv.shape[0], -1)
+        merge = torch.cat([receiving_flatten, delay_flatten, loss_flatten], 1)
+        fcOut = F.relu(self.fc(merge), inplace=True)
         value = self.critic_output(fcOut)
         return value

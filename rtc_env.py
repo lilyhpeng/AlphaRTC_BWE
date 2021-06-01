@@ -41,8 +41,9 @@ def log_to_linear(value):
 
 
 class GymEnv:
-    def __init__(self, env_id, config, step_time=60):
+    def __init__(self, config, step_time=60, env_id=None):
         self.env_id = str(env_id)
+        # self.env_id = env_id
         self.step_time = step_time
         self.gym_env = alphartc_gym.Gym(self.env_id)
         self.packet_record = PacketRecord()
@@ -70,7 +71,9 @@ class GymEnv:
         self.loss_ratio_list = []
 
     def reset(self):
-        self.gym_env.reset(trace_path=random.choice(self.trace_set), report_interval_ms=self.step_time,
+        # self.gym_env.reset(trace_path=random.choice(self.trace_set), report_interval_ms=self.step_time,
+                           # duration_time_ms=0)
+        self.gym_env.reset(trace_path='{}/trace_300k.json'.format(self.config['trace_dir']), report_interval_ms=self.step_time,
                            duration_time_ms=0)
         self.packet_record.reset()
         # self.receiving_rate = np.zeros(HISTORY_LENGTH)
@@ -85,6 +88,7 @@ class GymEnv:
     def get_reward(self):
         # reward = self.receiving_rate[HISTORY_LENGTH-1] - self.delay[HISTORY_LENGTH-1] - self.loss_ratio[HISTORY_LENGTH-1]
         reward = self.receiving_rate - self.delay - self.loss_ratio
+        # reward = self.receiving_rate
         return reward
 
     def step(self, action):
@@ -132,9 +136,9 @@ class GymEnv:
         # np.delete(self.prediction_history, 0, axis=0)
         # states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
         # todo: regularization needs to be fixed
-        self.state[0, 0, -1] = self.receiving_rate / np.max(self.receiving_rate_list)
-        self.state[0, 1, -1] = self.delay / np.max(self.delay_list)
-        self.state[0, 2, -1] = self.loss_ratio / np.max(self.loss_ratio_list)
+        self.state[0, 0, -1] = self.receiving_rate / 300000.0
+        self.state[0, 1, -1] = self.delay / 200.0
+        self.state[0, 2, -1] = self.loss_ratio
 
         # maintain list length
         if len(self.receiving_rate_list) == self.config['state_length']:

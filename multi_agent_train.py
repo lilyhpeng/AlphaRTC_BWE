@@ -1,6 +1,7 @@
 import torch
 import os
 import gym
+import datetime
 import time
 import logging
 from utils import load_config
@@ -9,12 +10,10 @@ import numpy as np
 from ActorCritic import ActorCritic
 from rtc_env import GymEnv
 
-CONFIG_FILE = ''
-TRAIN_TRACES = ''
-TEST_TRACES = ''
 
 # todo: log files needs to be created
 def central_agent(net_params_queue, exp_queues, config):
+    torch.set_num_threads(1)
 
     start = time.time()
 
@@ -36,7 +35,11 @@ def central_agent(net_params_queue, exp_queues, config):
     else:
         net.ActorNetwork.init_params()
         net.CriticNetwork.init_params()
-        actor_net_params = net.ActorNetwork.parameters()
+    #
+    actor_net_params = list(net.ActorNetwork.parameters())
+    for i in range(config['num_agents']):
+        # actor_net_params = net.ActorNetwork.parameters()
+        net_params_queue[i].put(actor_net_params)
 
     epoch = 0
     total_reward = 0.0
@@ -45,6 +48,8 @@ def central_agent(net_params_queue, exp_queues, config):
     # total_entropy = 0.0
 
     while True:
+        start = time.time()
+        actor_net_params = list(net.ActorNetwork.parameters())
         for i in range(config['num_agents']):
             net_params_queue[i].put(actor_net_params)
 
@@ -65,65 +70,76 @@ def central_agent(net_params_queue, exp_queues, config):
 
         if epoch % config['save_interval'] == 0:
             print('Train Epoch ' + str(epoch) + ', Model restored.')
+            print('Epoch costs' + str(time.time() - start) + 'seconds.')
             torch.save(net.ActorNetwork.state_dict(), config['model_dir'] + '/actor_' + str(epoch) + '.pt')
             torch.save(net.CriticNetwork.state_dict(), config['model_dir'] + '/critic_' + str(epoch) + '.pt')
 
 
 def agent(net_params_queue, exp_queues, config, id):
+    torch.set_num_threads(1)
+
     env = GymEnv(env_id=id, config=config)
     env.reset()
 
     net = ActorCritic(False, config)
-
-    actor_network_params = net_params_queue.get()
-    net.ActorNetwork.load_state_dict(actor_network_params)
-
-    bwe = config['sending_rate'][config['default_bwe']]
+    send_rate_list = config['sending_rate']
+    default_bwe_idx = config['default_bwe']
 
     s_batch = []
     a_batch = []
     r_batch = []
 
+    bwe = send_rate_list[default_bwe_idx]
+
+
     # experience RTC if not forced to stop
     while True:
         # todo: Agent interact with gym
+        actor_network_params = net_params_queue.get()
+        for target_param, source_param in zip(net.ActorNetwork.parameters(), actor_network_params):
+            target_param.data.copy_(source_param.data)
+
+
         state, reward, done, _ = env.step(bwe)  # todo: the shape of state needs to be regulated
 
         r_batch.append(reward)
 
-        action = net.predict(state)
-        bwe = config['sending_rate'][action]
+        action, entropy = net.predict(state)
+        bwe = send_rate_list[action]
 
         # ignore the first bwe and state since we don't have the ability to control it
+            #
+            # # synchronize the network parameters from the coordinator
+            # actor_network_params = net_params_queue.get()
+            # for target_param, source_param in zip(net.ActorNetwork.parameters(), actor_network_params):
+            #     target_param.data.copy_(source_param.data)
+            #
+            # del s_batch[:]
+            # del a_batch[:]
+            # del r_batch[:]
+
+        # todo: need to be fixed
         if len(r_batch) >= config['train_seq_length'] or done:
             exp_queues.put([s_batch,
                             a_batch,
                             r_batch,
                             done])
-
-            # synchronize the network parameters from the coordinator
-            actor_network_params = net_params_queue.get()
-            net.ActorNetwork.load_state_dict(actor_network_params)
-
-            del s_batch[:]
-            del a_batch[:]
-            del r_batch[:]
-
-        # todo: need to be fixed
-        if done:
-            action = config['default_bwe']
-            bwe = config['sending_rate'][action]
-            s_batch.append(np.zeros(config['state_dim'], config['state_length']))
-            a_batch.append(action)
+            action = default_bwe_idx
+            bwe = send_rate_list[action]
+            s_batch = []
+            a_batch = []
+            r_batch = []
+            # s_batch.append(np.zeros(config['state_dim'], config['state_length']))
+            # a_batch.append(action)
             env.reset()
         else:
             s_batch.append(state)
             a_batch.append(action)
 
-    pass
 
 
 def main():
+    start = time.time()
     config = load_config()
     num_agents = config['num_agents']
 
@@ -141,13 +157,19 @@ def main():
     agents = []
     for i in range(num_agents):
         agents.append(mp.Process(target=agent,
-                                 args=(net_params_queue, exp_queues, config, i)))
+                                 args=(net_params_queue[i], exp_queues[i], config, i)))
 
     for i in range(num_agents):
         agents[i].start()
 
     # wait until training is done
     coordinator.join()
+
+    for i in range(num_agents):
+        agents[i].join()
+
+    print(str(time.time() - start))
+
 
 if __name__ == '__main__':
     main()

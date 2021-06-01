@@ -10,10 +10,10 @@ from deep_rl.actor_critic import ActorCritic
 def load_config():
     config = {
         #todo: add parameters regarding configuration
-        'actor_learning_rate' : 0.001,
+        'actor_learning_rate': 0.01,
         'critic_learning_rate': 0.001,
-        'num_agents': 16,
-        'save_interval': 100,
+        'num_agents': 4,
+        'save_interval': 10,
 
         'default_bwe': 1,
         'train_seq_length': 1000,
@@ -28,10 +28,10 @@ def load_config():
         'layer1_shape': 128,
         'layer2_shape': 128,
 
-        'sending_rate': [300,750,1200,1850,2850,4300],
-        'entropy_weight': 0.5,
+        'sending_rate': [100000, 110000, 120000, 150000, 200000, 220000],
+        'entropy_weight': 0,
 
-        'trace_dir': './traces/origin',
+        'trace_dir': './traces',
         'log_dir': './logs',
         'model_dir': './models'
     }
