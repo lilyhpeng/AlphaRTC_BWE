@@ -6,9 +6,11 @@ import time
 import logging
 from utils import load_config
 import torch.multiprocessing as mp
+torch.multiprocessing.set_sharing_strategy('file_system')
 import numpy as np
 from ActorCritic import ActorCritic
 from rtc_env import GymEnv
+import matplotlib.pyplot as plt
 
 
 # todo: log files needs to be created
@@ -42,8 +44,10 @@ def central_agent(net_params_queue, exp_queues, config):
     epoch = 0
     total_reward = 0.0
     total_batch_len = 0.0
-    total_agents = 0
-    # total_entropy = 0.0
+    episode_entropy = 0.0
+    ax = []
+    ay = []
+    plt.ion()
 
     while True:
         start = time.time()
@@ -52,28 +56,37 @@ def central_agent(net_params_queue, exp_queues, config):
             net_params_queue[i].put(actor_net_params)
 
         for i in range(config['num_agents']):
-            s_batch, a_batch, r_batch, done = exp_queues[i].get()
+            s_batch, a_batch, r_batch, done, e_batch = exp_queues[i].get()
 
             net.getNetworkGradient(s_batch, a_batch, r_batch, done)
 
             total_reward += np.sum(r_batch)
             total_batch_len += len(r_batch)
+            episode_entropy += np.sum(e_batch)
 
         net.updateNetwork()
         epoch += 1
-        avg_reward = total_reward / total_batch_len / config['num_agents']
+        avg_reward = total_reward / total_batch_len
+        # avg_entropy = total_entropy / total_batch_len
 
         logging.info('Epoch ' + str(epoch) +
-                     '\nAverage reward: ' + str(avg_reward))
+                     '\nAverage reward: ' + str(avg_reward) +
+                     '\nEpisode entropy: ' + str(episode_entropy))
+        ax.append(epoch)
+        ay.append(episode_entropy)
+        plt.clf()
+        plt.plot(ax, ay)
+        plt.pause(0.1)
 
         total_reward = 0.0
         total_batch_len = 0
+        episode_entropy = 0.0
 
         if epoch % config['save_interval'] == 0:
             print('Train Epoch ' + str(epoch) + ', Model restored.')
             print('Epoch costs ' + str(time.time() - start) + ' seconds.')
-            torch.save(net.ActorNetwork.state_dict(), config['model_dir'] + '/actor_300k2_' + str(epoch) + '.pt')
-            torch.save(net.CriticNetwork.state_dict(), config['model_dir'] + '/critic_300k2_' + str(epoch) + '.pt')
+            torch.save(net.ActorNetwork.state_dict(), config['model_dir'] + '/actor_300k_' + str(epoch) + '.pt')
+            torch.save(net.CriticNetwork.state_dict(), config['model_dir'] + '/critic_300k_' + str(epoch) + '.pt')
 
 
 def agent(net_params_queue, exp_queues, config, id):
@@ -93,14 +106,13 @@ def agent(net_params_queue, exp_queues, config, id):
         s_batch = []
         a_batch = []
         r_batch = []
+        entropy_batch = []
 
         done = False
         actor_network_params = net_params_queue.get()
         for target_param, source_param in zip(net.ActorNetwork.parameters(), actor_network_params):
             target_param.data.copy_(source_param.data)
         # todo: Agent interact with gym
-        # ignore the first bwe and state since we don't have the ability to control it
-
         while not done:
             state, reward, done, _ = env.step(bwe)  # todo: the shape of state needs to be regulated
 
@@ -110,11 +122,13 @@ def agent(net_params_queue, exp_queues, config, id):
             bwe = send_rate_list[action]
             s_batch.append(state)
             a_batch.append(action)
-
+            entropy_batch.append(entropy)
+        # ignore the first bwe and state since we don't have the ability to control it
         exp_queues.put([s_batch[1:],
                         a_batch[1:],
                         r_batch[1:],
-                        done])
+                        done,
+                        entropy_batch[1:]])
 
         # if len(r_batch) >= config['train_seq_length'] or done:
         #     exp_queues.put([s_batch,

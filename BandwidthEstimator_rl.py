@@ -9,12 +9,12 @@ import numpy as np
 class Estimator(object):
     def __init__(self):
         self.config = load_config()
-        self.state = torch.zeros(1, 3, 10)
+        self.state = torch.zeros(1, self.config['state_dim'], self.config['state_length'])
         self.packet_record = PacketRecord()
         self.send_rate_list = self.config['sending_rate']
         self.model = ActorCritic(config=self.config)
         # load model here
-        actor_params = torch.load('./models/actor_300k2_160.pt')
+        actor_params = torch.load('./models/actor_300k_40.pt')
         self.model.ActorNetwork.load_state_dict(actor_params)
 
     def report_states(self, stats: dict):

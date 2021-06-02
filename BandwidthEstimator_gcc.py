@@ -55,6 +55,37 @@ class Estimator(object):
         with open("bandwidth_estimated_by_delay.txt", 'w') as f:
             f.write("========================== bandwidth_estimated_by_delay.txt =========================\n")
 
+    # add by wb: reset estimator according to rtc_env_gcc
+    def reset(self):
+        # ----- 包组时间相关 -----
+        self.packets_list = []  # 记录当前时间间隔内收到的所有包
+        self.packet_group = []
+        self.first_group_complete_time = -1  # 第一个包组的完成时间（该包组最后一个包的接收时间）
+
+        # ----- 延迟相关/计算trendline相关 -----
+        self.acc_delay = 0
+        self.smoothed_delay = 0
+        self.acc_delay_list = collections.deque([])
+        self.smoothed_delay_list = collections.deque([])
+
+        # ----- 预测带宽相关 -----
+        self.state = 'Hold'
+        self.last_bandwidth_estimation = 300 * 1000
+        self.avg_max_bitrate_kbps_ = -1  # 最大码率的指数移动均值
+        self.var_max_bitrate_kbps_ = -1  # 最大码率的方差
+        self.rate_control_region_ = "kRcMaxUnknown"
+        self.time_last_bitrate_change_ = -1  # 上一次变比特率的时间
+
+        self.gamma1 = 12.5  # 检测过载的动态阈值
+        self.num_of_deltas_ = 0  # delta的累计个数
+        self.time_over_using = -1  # 记录over_using的时间
+        self.prev_trend = 0.0  # 前一个trend
+        self.overuse_counter = 0  # 对overuse状态计数
+        self.overuse_flag = 'NORMAL'
+        self.last_update_ms = -1  # 上一次更新阈值的时间
+        self.last_update_threshold_ms = -1
+        self.now_ms = -1  # 当前系统时间
+
     def report_states(self, stats: dict):
         '''
         将200ms内接收到包的包头信息都存储于packets_list中
@@ -102,7 +133,7 @@ class Estimator(object):
             self.packets_list = []  # 清空packets_list
 
         with open("debug.log", 'a+') as f:
-            bwe = btandwidth_estimation / 1000
+            bwe = bandwidth_estimation / 1000
             f.write("Current BWE = " + str(int(bwe)) + " kbps" + '\n')
             f.write("=============================================================\n")
         with open("bandwidth_estimated.txt", 'a+') as f:

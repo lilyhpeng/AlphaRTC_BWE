@@ -7,6 +7,7 @@ import alphartc_gym
 # from gym.alphartc_gym.utils.packet_info import PacketInfo
 # from gym.alphartc_gym.utils.packet_record import PacketRecord
 from BandwidthEstimator_rl import Estimator
+import matplotlib.pyplot as plt
 
 def rl_test():
     f = open('test.log', 'a+')
