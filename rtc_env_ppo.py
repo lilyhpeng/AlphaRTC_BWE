@@ -72,12 +72,14 @@ class GymEnv:
         # states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
         self.state = torch.zeros((1, self.config['state_dim'], self.config['state_length']))
         self.gcc_estimator.reset()
-        # return states
+
+        return self.state
 
     def get_reward(self):
         # reward = self.receiving_rate[HISTORY_LENGTH-1] - self.delay[HISTORY_LENGTH-1] - self.loss_ratio[HISTORY_LENGTH-1]
-        # reward = self.receiving_rate / 100000.0 - (self.delay) - self.loss_ratio
-        reward = np.float64(np.log(1.1 + (self.receiving_rate / (self.delay + 200.0))))
+        # reward = self.receiving_rate / 100000.0 - self.delay - self.loss_ratio
+        reward = self.receiving_rate / 300000.0 - self.delay / 1000.0 - self.loss_ratio
+        # reward = np.float64(np.log(1e-5 + (self.receiving_rate / (self.delay + 200.0))))
         return reward
 
     def step(self, action):

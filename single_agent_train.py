@@ -37,7 +37,7 @@ def single_agent():
 
         r_batch.append(reward)
 
-        action, entropy = net.predict(state)
+        action = net.predict(state)
         bwe = config['sending_rate'][action]
         a_batch.append(action)
         s_batch.append(state)

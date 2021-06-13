@@ -10,18 +10,21 @@ from deep_rl.actor_critic import ActorCritic
 def load_config():
     config = {
         #todo: add parameters regarding configuration
-        'actor_learning_rate': 0.01,
-        'critic_learning_rate': 0.001,
-        'num_agents': 16,
+        # 'actor_learning_rate': 1e-5,
+        # 'critic_learning_rate': 1e-5,
+        'learning_rate': 1e-5,
+        'num_agents': 4,
         'save_interval': 20,
 
         'default_bwe': 2,
         'train_seq_length': 1000,
         'state_dim': 3,
         'state_length': 10,
-        'action_dim': 6,
+        'action_dim': 1,
         'device': 'cpu',
         'discount_factor': 0.99,
+        'exploration_param': 0.05,
+        'random_action': True,
         'load_model': False,
         'saved_actor_model_path': '',
         'saved_critic_model_path': '',
@@ -29,11 +32,13 @@ def load_config():
         'layer2_shape': 128,
 
         'sending_rate': [0.5, 0.75, 1.0, 1.25, 1.5, 2.0],
-        'entropy_weight': 0.5,
+        'entropy_weight': 0.0,
+        'ppo_clip': 0.2,
+        'ppo_epoch': 37,
 
         'trace_dir': './traces',
         'log_dir': './logs',
-        'model_dir': './models'
+        'model_dir': '/media/ExtHDD02/wb/bwe_models'
     }
 
     return config
