@@ -131,7 +131,7 @@ def draw_trace(trace_path):
             capacity_list.append(info["capacity"] * 1000)
         print(duration_list)
         print(capacity_list)
-        duration_sum = sum(duration_list)
+        # duration_sum = sum(duration_list)
         t = 0
         x = []
         y = []

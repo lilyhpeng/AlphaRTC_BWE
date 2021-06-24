@@ -124,7 +124,6 @@ class GymEnv:
 
         # calculate state:
         self.receiving_rate = self.packet_record.calculate_receiving_rate(interval=self.step_time)
-        #todo
         self.receiving_rate_list.append(self.receiving_rate)
         # states.append(liner_to_log(receiving_rate))
         # self.receiving_rate.append(receiving_rate)

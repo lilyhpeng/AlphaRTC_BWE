@@ -166,76 +166,81 @@ def agent(net_params_queue, exp_queues, config, id):
             storage.clear_storage()
             break
 
-# def chief(config, traffic_light, counter, shared_model, shared_gradient_buffer, optimizer):
-#     num_agents = config['num_agents']
-#     update_threshold = config['update_threshold']
-#
-#     while True:
-#         time.sleep(1)
-#
-#         # worker will wait after last loss computation
-#         if counter.get() < update_threshold:
-#             for n, p in shared_model.policy.named_parameters():
-#                 p._grad = Variable(shared_gradient_buffer.grads[n+'_grad'])
-#             optimizer.step()
-#             counter.reset()
-#             shared_gradient_buffer.reset()
-#             traffic_light.switch()  #workers start new loss computation
-#             print('Update.')
+def chief(config, traffic_light, counter, shared_model, shared_gradient_buffer, optimizer):
+    num_agents = config['num_agents']
+    update_threshold = config['update_threshold']
 
-# def train(rank, config, traffic_light, counter, shared_model, shared_gradient_buffer, shared_observation_stats):
-#     torch.manual_seed(123)
-#     env = GymEnv(env_id=rank, config=config)
-#     state_dim = config['state_dim']
-#     state_length = config['state_length']
-#     action_dim = config['action_dim']
-#     exploration_param = config['exploration_param']
-#     lr = config['learning_rate']
-#     betas = config['betas']
-#     gamma = config['discount_factor']
-#     K_epochs = config['ppo_epoch']
-#     ppo_clip = config['ppo_clip']
-#     # exploration_size = config['exploration_size']
-#
-#     ppo = PPO(state_dim, state_length, action_dim, exploration_param, lr, betas, gamma, K_epochs, ppo_clip)
-#     storage = Storage()
-#     # memory = ReplayMemory(exploration_size)
-#
-#     state = env.reset()
-#     state = Variable(torch.Tensor(state).unsqueeze(0))
-#     # done = False
-#     episode_len = 0
-#
-#     while True:
-#         time_step = 0
-#         time_to_guide = False
-#         episode_reward = 0
-#         while time_step < config['update_interval']:
-#             done = False
-#             state = torch.Tensor(env.reset())
-#             last_estimation = 300000
-#             action = 0
-#             if storage.is_terminals != []:
-#                 storage.is_terminals[-1] = True
-#             while not done and time_step < config['update_interval']:
-#                 if time_step % 5 == 4:
-#                     action = ppo.select_action(state, storage)
-#                     time_to_guide = True
-#
-#                 state, reward, done, last_estimation = env.step(action, last_estimation, time_to_guide)
-#                 time_to_guide = False
-#                 state = torch.Tensor(state)
-#                 # Collect data for update
-#                 if time_step % 5 == 4:
-#                     storage.rewards.append(reward)
-#                     storage.is_terminals.append(done)
-#                 time_step += 1
-#                 episode_reward += reward
-#
-#         storage.is_terminals[-1] = True
-#         next_value = ppo.get_value(state)
-#         storage.compute_returns(next_value, gamma)
-#         loss = ppo.get_gradient(storage)
+    while True:
+        time.sleep(1)
+
+        # worker will wait after last loss computation
+        if counter.get() < update_threshold:
+            for n, p in shared_model.policy.named_parameters():
+                p._grad = Variable(shared_gradient_buffer.grads[n+'_grad'])
+            optimizer.step()
+            counter.reset()
+            shared_gradient_buffer.reset()
+            traffic_light.switch()  #workers start new loss computation
+            print('Update.')
+
+def train(rank, config, traffic_light, counter, shared_model, shared_gradient_buffer, shared_observation_stats):
+    torch.manual_seed(123)
+    env = GymEnv(env_id=rank, config=config)
+    state_dim = config['state_dim']
+    state_length = config['state_length']
+    action_dim = config['action_dim']
+    exploration_param = config['exploration_param']
+    lr = config['learning_rate']
+    betas = config['betas']
+    gamma = config['discount_factor']
+    K_epochs = config['ppo_epoch']
+    ppo_clip = config['ppo_clip']
+    # exploration_size = config['exploration_size']
+
+    ppo = PPO(state_dim, state_length, action_dim, exploration_param, lr, betas, gamma, K_epochs, ppo_clip)
+    storage = Storage()
+    # memory = ReplayMemory(exploration_size)
+
+    state = env.reset()
+    state = Variable(torch.Tensor(state).unsqueeze(0))
+    # done = False
+    episode_len = 0
+
+    while True:
+        time_step = 0
+        time_to_guide = False
+        episode_reward = 0
+        while time_step < config['update_interval']:
+            done = False
+            state = torch.Tensor(env.reset())
+            last_estimation = 300000
+            action = 0
+            if storage.is_terminals != []:
+                storage.is_terminals[-1] = True
+            while not done and time_step < config['update_interval']:
+                if time_step % 5 == 4:
+                    action = ppo.select_action(state, storage)
+                    time_to_guide = True
+
+                state, reward, done, last_estimation = env.step(action, last_estimation, time_to_guide)
+                time_to_guide = False
+                state = torch.Tensor(state)
+                # Collect data for update
+                if time_step % 5 == 4:
+                    storage.rewards.append(reward)
+                    storage.is_terminals.append(done)
+                time_step += 1
+                episode_reward += reward
+
+        storage.is_terminals[-1] = True
+        next_value = ppo.get_value(state)
+        storage.compute_returns(next_value, gamma)
+        ppo.get_gradient(storage, shared_gradient_buffer)
+        counter.increment()
+        storage.clear_storage()
+
+        while traffic_light.get() == signal_init:
+            pass
 
 
 
