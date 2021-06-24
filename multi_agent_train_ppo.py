@@ -105,15 +105,6 @@ def agent(net_params_queue, exp_queues, config, id):
 
     # experience RTC if not forced to stop
     while True:
-        env.reset()
-        bwe = 100000 * 1.0
-        s_batch = []
-        r_batch = []
-        a_batch = []
-        v_batch = []
-        a_log_batch = []
-        is_terminal = []
-
         network_params = net_params_queue.get()
         for target_param, source_param in zip(net.Network.parameters(), network_params):
             target_param.data.copy_(source_param.data)
@@ -121,37 +112,44 @@ def agent(net_params_queue, exp_queues, config, id):
 
         # todo: Agent interact with gym
         while True:
-            state, reward, done, gcc_estimation = env.step(bwe)  # todo: the shape of state needs to be regulated
+            s_batch = []
+            r_batch = []
+            a_batch = []
+            v_batch = []
+            a_log_batch = []
+            is_terminal = []
+            time_step = 0
+            while time_step < config['update_interval']:
+                done = False
+                state = torch.Tensor(env.reset())
+                while not done and time_step < config['update_interval']:
+                    action, action_logprobs, value = net.predict(state)
+                    state, reward, done, gcc_estimation = env.step(action)  # todo: the shape of state needs to be regulated
 
-            state = torch.Tensor(state)
+                    state = torch.Tensor(state)
+                    time_step += 1
 
-            r_batch.append(reward)
+                    r_batch.append(reward)
+                    s_batch.append(state)
+                    a_batch.append(action)
+                    a_log_batch.append(action_logprobs)
+                    v_batch.append(value)
+                    is_terminal.append(done)
 
-            action, action_logprobs, value = net.predict(state)
-            bwe = action * gcc_estimation
-            s_batch.append(state)
-            a_batch.append(action)
-            a_log_batch.append(action_logprobs)
-            v_batch.append(value)
-            is_terminal.append(done)
-
-            if done:
-                return_batch = []
-                R_batch = np.zeros(len(r_batch) + 1)
-                R_batch[-1] = net.getValue(state)
-                for t in reversed(range(len(r_batch))):
-                    R_batch[t] = R_batch[t + 1] * config['discount_factor'] * (1 - is_terminal[t]) + r_batch[t]
-                    return_batch.append(torch.unsqueeze(torch.tensor(R_batch[t]), 0))
-                return_batch.reverse()
-            # ignore the first bwe and state since we don't have the ability to control it
-            # s_batch, a_batch, a_log_batch, v_batch, r_batch, return_batch
-                exp_queues.put([s_batch[1:],
-                                a_batch[1:],
-                                a_log_batch[1:],
-                                v_batch[1:],
-                                r_batch[1:],
-                                return_batch[1:]])
-                break
+            return_batch = []
+            R_batch = np.zeros(len(r_batch) + 1)
+            R_batch[-1] = net.getValue(state)
+            for t in reversed(range(len(r_batch))):
+                R_batch[t] = R_batch[t + 1] * config['discount_factor'] * (1 - is_terminal[t]) + r_batch[t]
+                return_batch.append(torch.unsqueeze(torch.tensor(R_batch[t]), 0))
+            return_batch.reverse()
+            exp_queues.put([s_batch,
+                            a_batch,
+                            a_log_batch,
+                            v_batch,
+                            r_batch,
+                            return_batch])
+            break
 
 
 def main():

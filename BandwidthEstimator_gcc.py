@@ -30,7 +30,7 @@ class Estimator(object):
 
         # ----- 预测带宽相关 -----
         self.state = 'Hold'
-        self.last_bandwidth_estimation = 300 * 1000
+        self.last_bandwidth_estimation = 1.0 * 300000
         self.avg_max_bitrate_kbps_ = -1  # 最大码率的指数移动均值
         self.var_max_bitrate_kbps_ = -1  # 最大码率的方差
         self.rate_control_region_ = "kRcMaxUnknown"
@@ -48,12 +48,12 @@ class Estimator(object):
 
         # with open("debug.log", 'w') as f:
         #     f.write("========================== debug.log =========================\n")
-        with open("bandwidth_estimated.txt", 'w') as f:
-            f.write("========================== bandwidth_estimated.txt =========================\n")
-        with open("bandwidth_estimated_by_loss.txt", 'w') as f:
-            f.write("========================== bandwidth_estimated_by_loss.txt =========================\n")
-        with open("bandwidth_estimated_by_delay.txt", 'w') as f:
-            f.write("========================== bandwidth_estimated_by_delay.txt =========================\n")
+        # with open("bandwidth_estimated.txt", 'w') as f:
+        #     f.write("========================== bandwidth_estimated.txt =========================\n")
+        # with open("bandwidth_estimated_by_loss.txt", 'w') as f:
+        #     f.write("========================== bandwidth_estimated_by_loss.txt =========================\n")
+        # with open("bandwidth_estimated_by_delay.txt", 'w') as f:
+        #     f.write("========================== bandwidth_estimated_by_delay.txt =========================\n")
 
     # add by wb: reset estimator according to rtc_env_gcc
     def reset(self):
@@ -70,7 +70,7 @@ class Estimator(object):
 
         # ----- 预测带宽相关 -----
         self.state = 'Hold'
-        self.last_bandwidth_estimation = 300 * 1000
+        self.last_bandwidth_estimation = 1.0 * 300000
         self.avg_max_bitrate_kbps_ = -1  # 最大码率的指数移动均值
         self.var_max_bitrate_kbps_ = -1  # 最大码率的方差
         self.rate_control_region_ = "kRcMaxUnknown"
@@ -85,6 +85,9 @@ class Estimator(object):
         self.last_update_ms = -1  # 上一次更新阈值的时间
         self.last_update_threshold_ms = -1
         self.now_ms = -1  # 当前系统时间
+
+    def update_bwe(self, last_bwe):
+        self.last_bandwidth_estimation = last_bwe
 
     def report_states(self, stats: dict):
         '''
@@ -118,15 +121,16 @@ class Estimator(object):
         计算估计带宽
         :return: 估计带宽 bandwidth_estimation
         '''
+
         BWE_by_delay, flag = self.get_estimated_bandwidth_by_delay()
-        with open("bandwidth_estimated_by_delay.txt", 'a+') as f:
-            bwe_delay = BWE_by_delay / 1000
-            f.write(str(int(bwe_delay)) + '\n')
+        # with open("bandwidth_estimated_by_delay.txt", 'a+') as f:
+        #     bwe_delay = BWE_by_delay / 1000
+        #     f.write(str(int(bwe_delay)) + '\n')
 
         BWE_by_loss = self.get_estimated_bandwidth_by_loss()
-        with open("bandwidth_estimated_by_loss.txt", 'a+') as f:
-            bwe_loss = BWE_by_loss / 1000
-            f.write(str(int(bwe_loss)) + '\n')
+        # with open("bandwidth_estimated_by_loss.txt", 'a+') as f:
+        #     bwe_loss = BWE_by_loss / 1000
+        #     f.write(str(int(bwe_loss)) + '\n')
 
         bandwidth_estimation = min(BWE_by_delay, BWE_by_loss)
         if flag == True:

@@ -1,24 +1,26 @@
 import torch
 from network import ActorNetwork
 from utils import load_config
-from ActorCritic import ActorCritic
+from ActorCritic_ppo import ActorCritic
 import numpy as np
-
-
+from BandwidthEstimator_gcc import Estimator as gcc_estimator
 
 class Estimator(object):
     def __init__(self):
         self.config = load_config()
         self.state = torch.zeros(1, self.config['state_dim'], self.config['state_length'])
         self.packet_record = PacketRecord()
-        self.send_rate_list = self.config['sending_rate']
         self.model = ActorCritic(config=self.config)
         # load model here
-        actor_params = torch.load('./models/actor_300k_40.pt')
-        self.model.ActorNetwork.load_state_dict(actor_params)
+        actor_params = torch.load('./models/Net_exp.pt')
+        self.model.oldNetwork.load_state_dict(actor_params)
+        self.agent_flag = 0
+        self.gcc_estimator = gcc_estimator()
+
 
     def report_states(self, stats: dict):
         # todo: generate state
+        self.gcc_estimator.report_states(stats)
         pkt = stats
         packet_info = PacketInfo()
         packet_info.payload_type = pkt["payload_type"]
@@ -47,8 +49,15 @@ class Estimator(object):
 
     def get_estimated_bandwidth(self)->int:
         # todo: make decision
-        action, _ = self.model.predict(self.state)
-        bandwidth_estimation = self.send_rate_list[action]
+        action, _, _ = self.model.predict(self.state)
+        gcc_decision = self.gcc_estimator.get_estimated_bandwidth()
+        self.agent_flag += 1
+        if self.agent_flag == 5:
+            bandwidth_estimation = action.item() * gcc_decision
+            self.gcc_estimator.update_bwe(bandwidth_estimation)
+            self.agent_flag = 0
+        else:
+            bandwidth_estimation = gcc_decision
 
         return bandwidth_estimation
 

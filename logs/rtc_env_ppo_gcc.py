@@ -10,13 +10,13 @@ from queue import Queue
 import gym
 from gym import spaces
 import torch
+import math
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gym"))
 import alphartc_gym
 from alphartc_gym.utils.packet_info import PacketInfo
 from alphartc_gym.utils.packet_record import PacketRecord
-from BandwidthEstimator_gcc import Estimator, PacketGroup
-
+from BandwidthEstimator_gcc_change import Estimator, PacketGroup
 
 UNIT_M = 1000000
 MAX_BANDWIDTH_MBPS = 8
@@ -26,18 +26,29 @@ STATE_DIMENSION = 4
 LOG_MAX_BANDWIDTH_MBPS = np.log(MAX_BANDWIDTH_MBPS)
 LOG_MIN_BANDWIDTH_MBPS = np.log(MIN_BANDWIDTH_MBPS)
 
+
+def liner_to_log(value):
+    # from 10kbps~8Mbps to 0~1
+    value = np.clip(value / UNIT_M, MIN_BANDWIDTH_MBPS, MAX_BANDWIDTH_MBPS)
+    log_value = np.log(value)
+    return (log_value - LOG_MIN_BANDWIDTH_MBPS) / (LOG_MAX_BANDWIDTH_MBPS - LOG_MIN_BANDWIDTH_MBPS)
+
+
+def log_to_linear(value):
+    # from 0~1 to 10kbps to 8Mbps
+    value = np.clip(value, 0, 1)
+    log_bwe = value * (LOG_MAX_BANDWIDTH_MBPS - LOG_MIN_BANDWIDTH_MBPS) + LOG_MIN_BANDWIDTH_MBPS
+    return np.exp(log_bwe) * UNIT_M
+
+
 class GymEnv:
     def __init__(self, config, step_time=60, env_id=None):
-        self.env_id = str(env_id)
-        # self.env_id = env_id
+        # self.env_id = str(env_id)
+        self.env_id = env_id
         self.step_time = step_time
         self.gym_env = alphartc_gym.Gym(self.env_id)
         self.packet_record = PacketRecord()
-        self.packet_list = []
-        self.gain_flag = 0
         self.gcc_estimator = Estimator()
-        self.gcc_decision = 300000
-
         self.config = config
 
         # initialize state information:
@@ -59,6 +70,7 @@ class GymEnv:
         self.receiving_rate_list = []
         self.delay_list = []
         self.loss_ratio_list = []
+        self.bandwidth_prediction_list=[]
 
     def reset(self):
         # self.gym_env.reset(trace_path=random.choice(self.trace_set), report_interval_ms=self.step_time,
@@ -74,26 +86,23 @@ class GymEnv:
         # states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
         self.state = torch.zeros((1, self.config['state_dim'], self.config['state_length']))
         self.gcc_estimator.reset()
-        self.gcc_decision = 300000
-        self.gain_flag = 0
 
         return self.state
 
     def get_reward(self):
         # reward = self.receiving_rate[HISTORY_LENGTH-1] - self.delay[HISTORY_LENGTH-1] - self.loss_ratio[HISTORY_LENGTH-1]
-        # reward = self.receiving_rate / 100000.0 - self.delay - self.loss_ratio
-        reward = self.receiving_rate / 300000.0 - self.delay / 1000.0 - self.loss_ratio
-        # reward = np.float64(np.log(1e-5 + (self.receiving_rate / (self.delay + 200.0))))
+        reward = self.receiving_rate/300000.0 - self.delay/1000.0 - self.loss_ratio
+        # reward = self.receiving_rate
         return reward
 
-    def step(self, action, use_action):
+    def step(self, action, last_prediction, time_to_guide):
         # action: log to linear
-
-        if use_action:
-            bandwidth_prediction = float(pow(2, (2 * action - 1))) * self.gcc_decision
-            self.gcc_estimator.update_bwe(last_bwe=bandwidth_prediction)
+        if time_to_guide == True:
+            bandwidth_prediction = last_prediction*pow(2, (2*action-1))
+            self.gcc_estimator.change_bandwidth_estimation(bandwidth_prediction)
         else:
-            bandwidth_prediction = self.gcc_decision
+            bandwidth_prediction = last_prediction
+        #bandwidth_prediction = action
 
         # run the action, get related packet list:
         packet_list, done = self.gym_env.step(bandwidth_prediction)
@@ -108,32 +117,43 @@ class GymEnv:
             packet_info.padding_length = pkt["padding_length"]
             packet_info.header_length = pkt["header_length"]
             packet_info.payload_size = pkt["payload_size"]
-            packet_info.size = pkt["header_length"] + pkt["payload_size"] + pkt["padding_length"]
-            # packet_info.bandwidth_prediction = self.last_bandwidth_estimation
+            packet_info.bandwidth_prediction = bandwidth_prediction
             self.packet_record.on_receive(packet_info)
             self.gcc_estimator.report_states(pkt)
 
         # calculate state:
         self.receiving_rate = self.packet_record.calculate_receiving_rate(interval=self.step_time)
+        #todo
+        self.receiving_rate_list.append(self.receiving_rate)
+        # states.append(liner_to_log(receiving_rate))
+        # self.receiving_rate.append(receiving_rate)
+        # np.delete(self.receiving_rate, 0, axis=0)
         self.delay = self.packet_record.calculate_average_delay(interval=self.step_time)
+        self.delay_list.append(self.delay)
+        # states.append(min(delay/1000, 1))
+        # self.delay.append(delay)
+        # np.delete(self.delay, 0, axis=0)
         self.loss_ratio = self.packet_record.calculate_loss_ratio(interval=self.step_time)
-
-        if use_action:
-            self.receiving_rate_list.append(self.receiving_rate)
-            self.delay_list.append(self.delay)
-            self.loss_ratio_list.append(self.loss_ratio)
-
-        # gcc estimation
+        self.loss_ratio_list.append(self.loss_ratio)
+        self.bandwidth_prediction=bandwidth_prediction
+        self.bandwidth_prediction_list.append(bandwidth_prediction)
         self.gcc_decision = self.gcc_estimator.get_estimated_bandwidth()
 
-        if use_action:
-            self.state = self.state.clone().detach()
-            self.state = torch.roll(self.state, -1, dims=-1)
-
-            # todo: regularization needs to be fixed
-            self.state[0, 0, -1] = self.receiving_rate / 300000.0
-            self.state[0, 1, -1] = self.delay / 20.0
-            self.state[0, 2, -1] = self.loss_ratio
+        self.state = self.state.clone().detach()
+        self.state = torch.roll(self.state, -1, dims=-1)
+        # states.append(loss_ratio)
+        # self.loss_ratio.append(loss_ratio)
+        # np.delete(self.loss_ratio, 0, axis=0)
+        # latest_prediction = self.packet_record.calculate_latest_prediction()
+        # states.append(liner_to_log(latest_prediction))
+        # self.prediction_history.append(latest_prediction)
+        # np.delete(self.prediction_history, 0, axis=0)
+        # states = np.vstack((self.receiving_rate, self.delay, self.loss_ratio, self.prediction_history))
+        # todo: regularization needs to be fixed
+        self.state[0, 0, -1] = self.receiving_rate / 300000.0
+        self.state[0, 1, -1] = self.delay / 1000.0
+        self.state[0, 2, -1] = self.loss_ratio
+        self.state[0, 3, -1] = self.bandwidth_prediction/ 300000.0
 
         # maintain list length
         if len(self.receiving_rate_list) == self.config['state_length']:
@@ -144,5 +164,5 @@ class GymEnv:
         # calculate reward:
         reward = self.get_reward()
 
-        return self.state, reward, done
+        return self.state, reward, done, self.gcc_decision
 

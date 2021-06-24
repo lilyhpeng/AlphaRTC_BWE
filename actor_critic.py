@@ -12,6 +12,27 @@ import numpy as np
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, state_length, action_dim, exploration_param=0.05, device="cpu"):
         super(ActorCritic, self).__init__()
+        # output of actor in [0, 1]
+        # self.actor =  nn.Sequential(
+        #         nn.Linear(state_dim, 128),
+        #         nn.ReLU(),
+        #         nn.Linear(128, 64),
+        #         nn.ReLU(),
+        #         nn.Linear(64, 32),
+        #         nn.ReLU(),
+        #         nn.Linear(32, action_dim),
+        #         nn.Sigmoid()
+        #         )
+        # # critic
+        # self.critic = nn.Sequential(
+        #         nn.Linear(state_dim, 128),
+        #         nn.ReLU(),
+        #         nn.Linear(128, 64),
+        #         nn.ReLU(),
+        #         nn.Linear(64,32),
+        #         nn.ReLU(),
+        #         nn.Linear(32, 1)
+        #         )
         self.layer1_shape = 128
         self.layer2_shape = 128
         self.numFcInput = 4096
@@ -24,22 +45,21 @@ class ActorCritic(nn.Module):
         self.fc = nn.Linear(self.numFcInput, self.layer2_shape)
         self.actor_output = nn.Linear(self.layer2_shape, action_dim)
         self.critic_output = nn.Linear(self.layer2_shape, 1)
-        # self.device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-        self.device = torch.device("cpu")
+        self.device = device
         self.action_var = torch.full((action_dim,), exploration_param**2).to(self.device)
         self.random_action = True
 
-    # def init_params(self):
-    #     for m in self.modules():
-    #         if isinstance(m, nn.Linear):
-    #             m.weight.data.normal_(0, 0.01)
-    #             m.bias.data.zero_()
-    #         elif isinstance(m, nn.Conv1d):
-    #             init.xavier_uniform_(m.weight.data)
-    #             init.constant_(m.bias.data, 0.1)
-    #         elif isinstance(m, nn.Conv2d):
-    #             init.xavier_uniform_(m.weight.data)
-    #             init.constant_(m.bias.data, 0.1)
+    def init_params(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Conv1d):
+                init.xavier_uniform_(m.weight.data)
+                init.constant_(m.bias.data, 0.1)
+            elif isinstance(m, nn.Conv2d):
+                init.xavier_uniform_(m.weight.data)
+                init.constant_(m.bias.data, 0.1)
 
     def forward(self, inputs):
         # value = self.critic(state)
@@ -53,6 +73,7 @@ class ActorCritic(nn.Module):
         #     action = dist.sample()
         #
         # action_logprobs = dist.log_prob(action)
+        #actor
         receivingConv = F.relu(self.rConv1d(inputs[:, 0:1, :]), inplace=True)
         delayConv = F.relu(self.dConv1d(inputs[:, 1:2, :]), inplace=True)
         lossConv = F.relu(self.lConv1d(inputs[:, 2:3, :]), inplace=True)

@@ -1,8 +1,10 @@
-import json
 import torch
+import torch.multiprocessing as mp
 import matplotlib.pyplot as plt
 import numpy as np
-from rtc_env import GymEnv
+import random
+from rtc_env_ppo import GymEnv
+from torch.autograd import Variable
 from deep_rl.storage import Storage
 from deep_rl.actor_critic import ActorCritic
 
@@ -12,13 +14,13 @@ def load_config():
         #todo: add parameters regarding configuration
         # 'actor_learning_rate': 1e-5,
         # 'critic_learning_rate': 1e-5,
-        'learning_rate': 1e-5,
+        'learning_rate': 3e-5,
         'num_agents': 4,
         'save_interval': 20,
 
         'default_bwe': 2,
         'train_seq_length': 1000,
-        'state_dim': 3,
+        'state_dim': 4,
         'state_length': 10,
         'action_dim': 1,
         'device': 'cpu',
@@ -31,10 +33,10 @@ def load_config():
         'layer1_shape': 128,
         'layer2_shape': 128,
 
-        'sending_rate': [0.5, 0.75, 1.0, 1.25, 1.5, 2.0],
         'entropy_weight': 0.0,
         'ppo_clip': 0.2,
         'ppo_epoch': 37,
+        'update_interval': 4000,
 
         'trace_dir': './traces',
         'log_dir': './logs',
@@ -62,25 +64,122 @@ def draw_state(record_action, record_state, path):
     plt.savefig("{}test_result.jpg".format(path))
 
 
-def draw_module(model, data_path, max_num_steps = 1000):
-    env = GymEnv()
+def draw_module(config, model, data_path, max_num_steps = 1000):
+    env = GymEnv(config=config, env_id=1)
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     record_reward = []
     record_state = []
     record_action = []
     episode_reward  = 0
     time_step = 0
-    tmp = model.random_action
     model.random_action = False
     while time_step < max_num_steps:
+        use_action_counter = 0
         done = False
-        state = torch.Tensor(env.reset())
+        state = torch.Tensor(env.reset()).to(device)
         while not done:
-            action, _, _ = model.forward(state)
-            state, reward, done, _ = env.step(action)
-            state = torch.Tensor(state)
+            if use_action_counter == 5:
+                use_action = True
+                use_action_counter = 0
+            else:
+                use_action = False
+                use_action_counter += 1
+
+            action, _, _ = model.predict(state)
+            state, reward, done = env.step(action, use_action)
+            state = torch.Tensor(state).to(device)
             record_state.append(state)
             record_reward.append(reward)
             record_action.append(action)
             time_step += 1
     model.random_action = True
     draw_state(record_action, record_state, data_path)
+
+class TrafficLight:
+    # used by chief to allow workers to run or not
+
+    def __init__(self, val=True):
+        self.val = mp.Value("b", False)
+        self.lock = mp.Lock()
+
+    def get(self):
+        with self.lock:
+            return self.val.value
+
+    def switch(self):
+        self.val.value = (not self.val.value)
+
+class Counter:
+    # enable the chief to access worker's total number of updates
+    def __init__(self, val=True):
+        self.val = mp.Value("i", 0)
+        self.lock = mp.Lock()
+
+    def get(self):
+        # used by chief
+        with self.lock:
+            return self.val.value
+
+    def increment(self):
+        # used by workers
+        with self.lock:
+            self.val.value += 1
+
+    def reset(self):
+        # used by chief
+        with self.lock:
+            self.val.value = 0
+
+
+class shared_grad_buffer():
+    def __init__(self, model):
+        self.grads = {}
+        for name, p in model.named_parameters():
+            self.grads[name+'_grad'] = torch.ones(p.size()).share_memory_()
+
+    def add_grad(self, model):
+        for name, p in model.named_parameters():
+            self.grads[name+'_grad'] = p.grad.data
+
+    def reset(self):
+        for name, grad in self.grads.items():
+            self.grads[name].fill_(0)
+
+class shared_obs_stats():
+    def __init__(self, num_inputs):
+        self.n = torch.zeros(num_inputs).share_memory_()
+        self.mean = torch.zeros(num_inputs).share_memory_()
+        self.mean_diff = torch.zeros(num_inputs).share_memory_()
+        self.var = torch.zeros(num_inputs).share_memory_()
+
+    def observes(self, obs):
+        x = obs.data.squeeze()
+        self.n += 1
+        last_mean = self.mean.clone()
+        self.mean += (x - self.mean) / self.n
+        self.mean_diff += (x - last_mean) * (x - self.mean)
+        self.var = torch.clamp(self.mean_diff/self.n, min=1e-2)
+
+    def normalize(self, inputs):
+        obs_mean = Variable(self.mean.unsqueeze(0).expand_as(inputs))
+        obs_std = Variable(torch.sqrt(self.var).unsqueeze(0).expand_as(inputs))
+        return torch.clamp((inputs - obs_mean)/obs_std, -5., 5.)
+
+
+# class ReplayMemory(object):
+#     def __init__(self, capacity):
+#         self.capacity = capacity
+#         self.memory = []
+#
+#     def push(self, events):
+#         for event in zip(*events):
+#             self.memory.append(event)
+#             if len(self.memory) > self.capacity:
+#                 del self.memory[0]
+#
+#     def clear(self):
+#         self.memory = []
+#
+#     def sample(self, batch_size):
+#         samples = zip(*random.sample(self.memory, batch_size))
+#         return map(lambda x: torch.cat(x, 0), samples)
