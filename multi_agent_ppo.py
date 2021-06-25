@@ -170,6 +170,7 @@ def chief(config, traffic_light, counter, shared_model, shared_batch_buffer):
     num_agents = config['num_agents']
     update_threshold = num_agents - 1
     gamma = config['discount_factor']
+    epochs = 0
 
     while True:
         time.sleep(1)
@@ -190,11 +191,12 @@ def chief(config, traffic_light, counter, shared_model, shared_batch_buffer):
         #     optimizer.step()
         #     counter.reset()
         #     shared_gradient_buffer.reset()
+            epochs += 1
 
             counter.reset()
             shared_batch_buffer.clear_buffer()
             traffic_light.switch()  # workers start new collecting
-            print('Update Network.')
+            print('Epoch ' + str(epochs) + ': policy_loss: ' + str(policy_loss) + ', val_loss: ' + str(val_loss))
 
 def train(rank, config, traffic_light, counter, shared_model, shared_batch_buffer):
     torch.manual_seed(123)
