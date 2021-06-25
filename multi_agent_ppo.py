@@ -6,7 +6,7 @@ import time
 from deep_rl.storage import Storage
 from deep_rl.ppo_agent_multiv import PPO
 import logging
-from utils import load_config, TrafficLight, Counter, shared_grad_buffer, shared_obs_stats
+from utils import load_config, TrafficLight, Counter, shared_batch_buffer
 from torch.autograd import Variable
 import torch.multiprocessing as mp
 import torch.optim as optim
@@ -166,24 +166,37 @@ def agent(net_params_queue, exp_queues, config, id):
             storage.clear_storage()
             break
 
-def chief(config, traffic_light, counter, shared_model, shared_gradient_buffer, optimizer):
+def chief(config, traffic_light, counter, shared_model, shared_batch_buffer):
     num_agents = config['num_agents']
-    update_threshold = config['update_threshold']
+    update_threshold = num_agents - 1
+    gamma = config['discount_factor']
 
     while True:
         time.sleep(1)
+        storage = Storage()
 
         # worker will wait after last loss computation
-        if counter.get() < update_threshold:
-            for n, p in shared_model.policy.named_parameters():
-                p._grad = Variable(shared_gradient_buffer.grads[n+'_grad'])
-            optimizer.step()
-            counter.reset()
-            shared_gradient_buffer.reset()
-            traffic_light.switch()  #workers start new loss computation
-            print('Update.')
 
-def train(rank, config, traffic_light, counter, shared_model, shared_gradient_buffer, shared_observation_stats):
+        if counter.get() < update_threshold:
+            for i in range(num_agents):
+                storage.states = shared_batch_buffer.buffer[str(i) + 'states']
+                storage.actions = shared_batch_buffer.buffer[str(i) + 'actions']
+                storage.rewards = shared_batch_buffer.buffer[str(i) + 'rewards']
+                next_value = shared_batch_buffer.buffer[str(i) + 'next_value']
+                storage.compute_returns(next_value, gamma)
+                policy_loss, val_loss = shared_model.update(storage)
+        #     for n, p in shared_model.policy.named_parameters():
+        #         p._grad = Variable(shared_gradient_buffer.grads[n+'_grad'])
+        #     optimizer.step()
+        #     counter.reset()
+        #     shared_gradient_buffer.reset()
+
+            counter.reset()
+            shared_batch_buffer.clear_buffer()
+            traffic_light.switch()  # workers start new collecting
+            print('Update Network.')
+
+def train(rank, config, traffic_light, counter, shared_model, shared_batch_buffer):
     torch.manual_seed(123)
     env = GymEnv(env_id=rank, config=config)
     state_dim = config['state_dim']
@@ -200,16 +213,21 @@ def train(rank, config, traffic_light, counter, shared_model, shared_gradient_bu
     ppo = PPO(state_dim, state_length, action_dim, exploration_param, lr, betas, gamma, K_epochs, ppo_clip)
     storage = Storage()
     # memory = ReplayMemory(exploration_size)
+    # state = env.reset()
+    # state = Variable(torch.Tensor(state).unsqueeze(0))
 
-    state = env.reset()
-    state = Variable(torch.Tensor(state).unsqueeze(0))
     # done = False
     episode_len = 0
 
     while True:
+        # sync share_model
+        ppo.policy.load_state_dict(shared_model.policy.state_dict())
+        ppo.policy_old.load_state_dict(ppo.policy.state_dict())
+
         time_step = 0
         time_to_guide = False
         episode_reward = 0
+        signal_init = traffic_light.get()
         while time_step < config['update_interval']:
             done = False
             state = torch.Tensor(env.reset())
@@ -232,11 +250,14 @@ def train(rank, config, traffic_light, counter, shared_model, shared_gradient_bu
                 time_step += 1
                 episode_reward += reward
 
-        storage.is_terminals[-1] = True
+        # storage.is_terminals[-1] = True
         next_value = ppo.get_value(state)
-        storage.compute_returns(next_value, gamma)
-        ppo.get_gradient(storage, shared_gradient_buffer)
+        # storage.compute_returns(next_value, gamma)
+        shared_batch_buffer.push_batch(rank, storage.states, storage.actions, storage.rewards, next_value)
         counter.increment()
+
+        # ppo.get_gradient(storage, shared_gradient_buffer)
+        # counter.increment()
         storage.clear_storage()
 
         while traffic_light.get() == signal_init:
@@ -248,63 +269,62 @@ def main():
     # start = time.time()
     config = load_config()
     num_agents = config['num_agents']
-    # state_dim = config['state_dim']
-    # state_length = config['state_length']
-    # action_dim = config['action_dim']
-    # exploration_param = config['exploration_param']
-    # lr = config['learning_rate']
-    # betas = config['betas']
-    # gamma = config['discount_factor']
-    # K_epochs = config['ppo_epoch']
-    # ppo_clip = config['ppo_clip']
-    #
-    # torch.manual_seed(123)
-    #
-    # traffic_light = TrafficLight()
-    # counter = Counter()
-    #
-    # shared_model = PPO(state_dim, state_length, action_dim, exploration_param, lr, betas, gamma, K_epochs, ppo_clip)
-    #
-    # shared_model.policy.share_memory()
-    #
-    # shared_gradient_buffer = shared_grad_buffer(shared_model.policy)
-    # shared_observation_stats = shared_obs_stats(state_dim)
-    #
+    state_dim = config['state_dim']
+    state_length = config['state_length']
+    action_dim = config['action_dim']
+    exploration_param = config['exploration_param']
+    lr = config['learning_rate']
+    betas = config['betas']
+    gamma = config['discount_factor']
+    K_epochs = config['ppo_epoch']
+    ppo_clip = config['ppo_clip']
+
+    torch.manual_seed(123)
+
+    traffic_light = TrafficLight()
+    counter = Counter()
+
+    shared_model = PPO(state_dim, state_length, action_dim, exploration_param, lr, betas, gamma, K_epochs, ppo_clip)
+
+    shared_model.policy.share_memory()
+
+    batch_buffer = shared_batch_buffer()
+
     # optimizer = optim.Adam(shared_model.policy.parameters(), lr=lr)
-    #
-    # processes = []
-    # p = mp.Process(target=chief, args=(config, traffic_light, counter, shared_model, shared_gradient_buffer, optimizer))
-    # p.start()
-    # processes.append(p)
-    # for rank in range(num_agents):
-    #     p = mp.Process(target=train, args=(rank, config, traffic_light, counter, shared_model, shared_gradient_buffer, shared_observation_stats))
-    #     p.start()
-    #     processes.append(p)
-    # for p in processes:
-    #     p.join()
 
-    #
-
-    agents = []
-    net_params_queue = []
-    exp_queues = []
-    for i in range(num_agents):
-        net_params_queue.append(mp.Queue(1))
-        exp_queues.append(mp.Queue(1))
-
-    # coordinator = Network(config)
-    coordinator = mp.Process(target=central_agent,
-                             args=(net_params_queue, exp_queues, config))
-    coordinator.start()
-    # agents.append(coordinator)
-
-    for i in range(num_agents):
-        p = mp.Process(target=agent, args=(net_params_queue[i], exp_queues[i], config, i))
+    processes = []
+    p = mp.Process(target=chief, args=(config, traffic_light, counter, shared_model, batch_buffer))
+    p.start()
+    processes.append(p)
+    for rank in range(num_agents):
+        p = mp.Process(target=train, args=(rank, config, traffic_light, counter, shared_model, batch_buffer))
         p.start()
-        agents.append(p)
+        processes.append(p)
+    for p in processes:
+        p.join()
 
-    # wait until training is done
-    coordinator.join()
+    #
+
+    # agents = []
+    # net_params_queue = []
+    # exp_queues = []
+    # for i in range(num_agents):
+    #     net_params_queue.append(mp.Queue(1))
+    #     exp_queues.append(mp.Queue(1))
+    #
+    # # coordinator = Network(config)
+    # coordinator = mp.Process(target=central_agent,
+    #                          args=(net_params_queue, exp_queues, config))
+    # coordinator.start()
+    # # agents.append(coordinator)
+    #
+    # for i in range(num_agents):
+    #     p = mp.Process(target=agent, args=(net_params_queue[i], exp_queues[i], config, i))
+    #     p.start()
+    #     agents.append(p)
+    #
+    # # wait until training is done
+    # coordinator.join()
     #
     # for p in agents:
     #     p.join()

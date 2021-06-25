@@ -38,31 +38,31 @@ class PPO:
         action, action_logprobs, value, action_mean = self.policy_old.forward(state)
         return value
 
-    def get_gradient(self, storage, shared_model, shared_grad_buffer):
-        if self.use_gae:
-            raise NotImplementedError
-        advantages = (torch.tensor(storage.returns) - torch.tensor(storage.values)).detach()
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
-        advantages = advantages.to(self.device)
-
-        old_states = torch.squeeze(torch.stack(storage.states).to(self.device), 1).detach()
-        old_actions = torch.squeeze(torch.stack(storage.actions).to(self.device), 1).detach()
-        old_action_logprobs = torch.squeeze(torch.stack(storage.logprobs), 1).to(self.device).detach()
-        old_returns = torch.squeeze(torch.stack(storage.returns), 1).to(self.device).detach()
-
-        for t in range(self.ppo_epoch):
-            self.policy.zero_grad()
-            logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
-            ratios = torch.exp(logprobs - old_action_logprobs)
-
-            surr1 = ratios * advantages
-            surr2 = torch.clamp(ratios, 1 - self.ppo_clip, 1 + self.ppo_clip) * advantages
-            policy_loss = -torch.min(surr1, surr2).mean()
-            value_loss = 0.5 * (state_values - old_returns).pow(2).mean()
-            loss = policy_loss + value_loss
-
-            loss.backward()
-            shared_grad_buffer.add_grad(self.policy)
+    # def get_gradient(self, storage, shared_model, shared_grad_buffer):
+    #     if self.use_gae:
+    #         raise NotImplementedError
+    #     advantages = (torch.tensor(storage.returns) - torch.tensor(storage.values)).detach()
+    #     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
+    #     advantages = advantages.to(self.device)
+    #
+    #     old_states = torch.squeeze(torch.stack(storage.states).to(self.device), 1).detach()
+    #     old_actions = torch.squeeze(torch.stack(storage.actions).to(self.device), 1).detach()
+    #     old_action_logprobs = torch.squeeze(torch.stack(storage.logprobs), 1).to(self.device).detach()
+    #     old_returns = torch.squeeze(torch.stack(storage.returns), 1).to(self.device).detach()
+    #
+    #     for t in range(self.ppo_epoch):
+    #         self.policy.zero_grad()
+    #         logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
+    #         ratios = torch.exp(logprobs - old_action_logprobs)
+    #
+    #         surr1 = ratios * advantages
+    #         surr2 = torch.clamp(ratios, 1 - self.ppo_clip, 1 + self.ppo_clip) * advantages
+    #         policy_loss = -torch.min(surr1, surr2).mean()
+    #         value_loss = 0.5 * (state_values - old_returns).pow(2).mean()
+    #         loss = policy_loss + value_loss
+    #
+    #         loss.backward()
+    #         shared_grad_buffer.add_grad(self.policy)
 
             # self.optimizer.zero_grad()
             # loss.backward()

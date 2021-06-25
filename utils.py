@@ -131,6 +131,20 @@ class Counter:
             self.val.value = 0
 
 
+class shared_batch_buffer():
+    def __init__(self):
+        self.buffer = {}
+
+    def push_batch(self, rank, s_batch, a_batch, r_batch, is_terminal, next_value):
+        self.buffer[str(rank) + 'states'] = s_batch
+        self.buffer[str(rank) + 'actions'] = a_batch
+        self.buffer[str(rank) + 'rewards'] = r_batch
+        self.buffer[str(rank) + 'is_terminal'] = is_terminal
+        self.buffer[str(rank) + 'next_value'] = next_value
+
+    def clear_buffer(self):
+        self.buffer = {}
+
 class shared_grad_buffer():
     def __init__(self, model):
         self.grads = {}
