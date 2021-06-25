@@ -30,6 +30,7 @@ class Estimator(object):
         self.smoothed_delay_list = collections.deque([])
 
         # ----- 吞吐量 -----
+        self.last_time = None
         self.estimated_throughput_bps = None
         self.estimated_throughput_kbps = None
 
@@ -96,35 +97,40 @@ class Estimator(object):
         计算估计带宽
         :return: 估计带宽 bandwidth_estimation
         '''
-        if len(self.packets_list) <= 1:
-            return self.last_bandwidth_estimation
+        # if len(self.packets_list) <= 1:
+        #     return self.last_bandwidth_estimation
 
         # ---------- 计算吞吐量 ---------
+        if self.last_time == None:
+            self.last_time = self.packets_list[0].receive_timestamp
         estimated_throughput = 0
         for pkt in self.packets_list:
             estimated_throughput += pkt.size
-        self.estimated_throughput_bps = 1000 * 8 * estimated_throughput / (
-                self.now_ms - self.packets_list[0].receive_timestamp)
-        self.estimated_throughput_kbps = self.estimated_throughput_bps / 1000
+
+        if len(self.packets_list) == 0:
+            self.estimated_throughput_bps = 0
+        else:
+            time_delta = self.now_ms - self.packets_list[0].receive_timestamp
+            time_delta = max(time_delta,Time_Interval)
+            self.estimated_throughput_bps = 1000 * 8 * estimated_throughput / time_delta
+            self.estimated_throughput_kbps = self.estimated_throughput_bps / 1000
+
+        print("estimated_throughput_kbps = "+str(self.estimated_throughput_kbps)+" kbps")
 
         BWE_by_delay, flag = self.get_estimated_bandwidth_by_delay()
-        with open("bandwidth_estimated_by_delay.txt", 'a+') as f:
-            bwe_delay = BWE_by_delay / 1000
-            f.write(str(int(bwe_delay)) + '\n')
+        BWE_by_loss, loss_rate = self.get_estimated_bandwidth_by_loss()
 
-        # BWE_by_loss = self.get_estimated_bandwidth_by_loss()
-        # with open("bandwidth_estimated_by_loss.txt", 'a+') as f:
-        #     bwe_loss = BWE_by_loss / 1000
-        #     f.write(str(int(bwe_loss)) + '\n')
-        #
-        # if flag == True:
-        #     self.packets_list = []  # 清空packets_list
-        #     bandwidth_estimation = min(BWE_by_delay, BWE_by_loss)
-        # else:
-        #     bandwidth_estimation = BWE_by_loss
+        if loss_rate > 0:
+            bandwidth_estimation = min(BWE_by_delay, BWE_by_loss)
+        else:
+            bandwidth_estimation = BWE_by_delay
+
         if flag == True:
             self.packets_list = []  # 清空packets_list
-        bandwidth_estimation = BWE_by_delay
+            self.last_time = self.now_ms
+        else:
+            bandwidth_estimation = BWE_by_loss
+
         with open("debug.log", 'a+') as f:
             bwe = bandwidth_estimation / 1000
             f.write("Current BWE = " + str(int(bwe)) + " kbps" + '\n')
@@ -180,14 +186,19 @@ class Estimator(object):
         loss_rate = self.caculate_loss_rate()
         if loss_rate == -1:
             print("len(self.packets_list) == 0")
-            return self.last_bandwidth_estimation
+            return self.last_bandwidth_estimation, loss_rate
+
+        if loss_rate > 0:
+            self.last_time_update_BW_max = self.now_ms
+            self.BW_max = self.estimated_throughput_kbps
 
         bandwidth_estimation = self.rate_adaptation_by_loss(loss_rate)
 
         with open("debug.log", 'a+') as f:
             bwe = bandwidth_estimation / 1000
             f.write("BWE by loss = " + str(int(bwe)) + " kbps" + '\n')
-        return bandwidth_estimation
+
+        return bandwidth_estimation, loss_rate
 
     def caculate_loss_rate(self):
         '''
@@ -280,6 +291,8 @@ class Estimator(object):
         :param pkt_group_list: 存有每个包组信息的list
         :return: 趋势斜率trendline
         '''
+        print("delay_gradient_list : " + str(delay_gradient_list))
+
         for i, delay_gradient in enumerate(delay_gradient_list):
             accumulated_delay = self.acc_delay + delay_gradient
             smoothed_delay = kTrendlineSmoothingCoeff * self.smoothed_delay + (
@@ -307,6 +320,11 @@ class Estimator(object):
                 numerator += (self.acc_delay_list[i] - avg_acc_delay) * (
                         self.smoothed_delay_list[i] - avg_smoothed_delay)
                 denominator += (self.acc_delay_list[i] - avg_acc_delay) * (self.acc_delay_list[i] - avg_acc_delay)
+
+            print("self.acc_delay_list : "+str(self.acc_delay_list))
+            print("avg_acc_delay : " + str(avg_acc_delay))
+
+
             trendline = numerator / denominator
         else:
             trendline = None
@@ -334,31 +352,17 @@ class Estimator(object):
             f.write("modified_trend = " + str(modified_trend) + " | threshold = " + str(self.gamma1) + '\n')
             f.write("trendline = " + str(trendline) + " | prev_trend = " + str(self.prev_trend) + '\n')
 
-        # if modified_trend > self.gamma1:
-        #     if self.time_over_using == -1:
-        #         self.time_over_using = ts_delta / 2
-        #     else:
-        #         self.time_over_using += ts_delta
-        #     self.overuse_counter += 1
-        #     if self.time_over_using > kOverUsingTimeThreshold and self.overuse_counter > 1:
-        #         if trendline > self.prev_trend:
-        #             self.time_over_using = 0
-        #             self.overuse_counter = 0
-        #             self.overuse_flag = 'OVERUSE'
-        # elif modified_trend < -self.gamma1:
-        #     self.time_over_using = -1
-        #     self.overuse_counter = 0
-        #     self.overuse_flag = 'UNDERUSE'
-        # else:
-        #     self.time_over_using = -1
-        #     self.overuse_counter = 0
-        #     self.overuse_flag = 'NORMAL'
-
         if modified_trend > self.gamma1:
-            if trendline > self.prev_trend:
-                self.time_over_using = 0
-                self.overuse_counter = 0
-                self.overuse_flag = 'OVERUSE'
+            if self.time_over_using == -1:
+                self.time_over_using = ts_delta / 2
+            else:
+                self.time_over_using += ts_delta
+            self.overuse_counter += 1
+            if self.time_over_using > kOverUsingTimeThreshold and self.overuse_counter > 1:
+                if trendline > self.prev_trend:
+                    self.time_over_using = 0
+                    self.overuse_counter = 0
+                    self.overuse_flag = 'OVERUSE'
         elif modified_trend < -self.gamma1:
             self.time_over_using = -1
             self.overuse_counter = 0
@@ -368,7 +372,19 @@ class Estimator(object):
             self.overuse_counter = 0
             self.overuse_flag = 'NORMAL'
 
-
+        # if modified_trend > self.gamma1:
+        #     if trendline > self.prev_trend:
+        #         self.time_over_using = 0
+        #         self.overuse_counter = 0
+        #         self.overuse_flag = 'OVERUSE'
+        # elif modified_trend < -self.gamma1:
+        #     self.time_over_using = -1
+        #     self.overuse_counter = 0
+        #     self.overuse_flag = 'UNDERUSE'
+        # else:
+        #     self.time_over_using = -1
+        #     self.overuse_counter = 0
+        #     self.overuse_flag = 'NORMAL'
 
         self.prev_trend = trendline
         self.update_threthold(modified_trend, now_ms)  # 更新判断过载的阈值
@@ -395,8 +411,8 @@ class Estimator(object):
         kMaxTimeDeltaMs = 100
         time_delta_ms = min(now_ms - self.last_update_threshold_ms, kMaxTimeDeltaMs)
         self.gamma1 += k * (abs(modified_trend) - self.gamma1) * time_delta_ms
-        if (self.gamma1 < 4):
-            self.gamma1 = 4    # todo:6 or 2.9?
+        if (self.gamma1 < 6):
+            self.gamma1 = 6  # todo:6 or 4?
         elif (self.gamma1 > 600):
             self.gamma1 = 600
         self.last_update_threshold_ms = now_ms
@@ -410,10 +426,10 @@ class Estimator(object):
             if self.state != 'Decrease':
                 self.state = 'Decrease'
                 # ------- Cubic预测带宽相关 -------
-                self.BW_max = self.estimated_throughput_kbps
-                # self.BW_max=self.last_bandwidth_estimation/1000
-                self.last_time_update_BW_max = self.now_ms
+            self.BW_max = self.estimated_throughput_kbps
+            self.last_time_update_BW_max = self.now_ms
         elif overuse_flag == 'UNDERUSE':
+            self.last_time_update_BW_max = self.now_ms
             self.state = 'Hold'
         return self.state
 
@@ -431,7 +447,7 @@ class Estimator(object):
         最大码率标准差表征了链路容量 link capacity 的估计值相对于均值的波动程度。
         '''
         # self.UpdateMaxThroughputEstimate(estimated_throughput_kbps)
-        if self.var_max_bitrate_kbps_ * self.avg_max_bitrate_kbps_<0:
+        if self.var_max_bitrate_kbps_ * self.avg_max_bitrate_kbps_ < 0:
             std_max_bit_rate = 0
         else:
             std_max_bit_rate = pow(self.var_max_bitrate_kbps_ * self.avg_max_bitrate_kbps_, 0.5)
@@ -523,8 +539,8 @@ class Estimator(object):
         '''
         C, beta = 18.75, 0.85
         BW_max = self.BW_max  # todo: get BW_max
-        with open("debug.log",'a+') as f:
-            f.write("BW_max = "+str(self.BW_max)+'\n')
+        with open("debug.log", 'a+') as f:
+            f.write("BW_max = " + str(self.BW_max) + '\n')
         # if self.avg_max_bitrate_kbps_ == -1:
         #     BW_max = self.BW_max
         # else:
@@ -532,7 +548,7 @@ class Estimator(object):
         delta_time = (now_ms - last_ms) / 1000
         # fixme:cubic_increased_bps error
         cubic_increased_kbps = C * pow((delta_time - pow(((1 - beta) * BW_max / C), 1.0 / 3)), 3) + BW_max
-        cubic_increased_bps = cubic_increased_kbps*1000
+        cubic_increased_bps = cubic_increased_kbps * 1000
         return cubic_increased_bps
 
     def MultiplicativeRateIncrease(self, now_ms, last_ms):
